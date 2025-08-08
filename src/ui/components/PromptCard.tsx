@@ -24,69 +24,84 @@ import { IconButton } from "./IconButton";
 import { FeatherMoreVertical } from "@subframe/core";
 
 interface PromptCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
+  // Small meta text on the right of badges (used for time string)
   text?: React.ReactNode;
-  text2?: React.ReactNode;
+  // Title and content
+  titleText?: React.ReactNode;
+  contentText?: React.ReactNode;
+  // If true, show "Create template" styling; else "Copy template"
   boolean?: boolean;
-  body?: React.ReactNode;
-  nonTemplate?: React.ReactNode;
-  template?: React.ReactNode;
+  // Optional data-driven decorations
+  tags?: string[];
+  category?: string | null;
+  // When true, right-side actions appear on hover
+  hoverActions?: boolean;
   className?: string;
+  onCreateTemplate?: () => void;
 }
 
 const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
   function PromptCardRoot(
     {
       text,
-      text2,
+      titleText,
+      contentText,
       boolean = false,
-      body,
-      nonTemplate = <FeatherCopy />,
-      template = <FeatherSparkle />,
+      // Icons are internal, not part of props
+      tags = [],
+      category = null,
+      hoverActions = false,
       className,
+      onCreateTemplate,
       ...otherProps
     }: PromptCardRootProps,
     ref
   ) {
+    const isClickable = typeof (otherProps as { onClick?: unknown }).onClick === 'function';
     return (
       <div
         className={SubframeUtils.twClassNames(
           "group/8f873461 flex w-full items-center justify-center gap-2 rounded-lg border border-solid border-neutral-border bg-default-background pl-6 pr-3 py-4 shadow-sm",
           { "items-center justify-center": boolean },
-          className
+          className,
+          isClickable ? "cursor-pointer hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-500/40" : undefined
         )}
         ref={ref}
+        role={isClickable ? "button" : undefined}
+        tabIndex={isClickable ? 0 : undefined}
+        onKeyDown={(e) => {
+          if (!isClickable) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const handler = (otherProps as unknown as { onClick?: (evt: any) => void }).onClick;
+            handler?.((e as unknown) as any);
+          }
+        }}
         {...otherProps}
       >
         <div className="flex grow shrink-0 basis-0 flex-col items-start justify-center gap-4">
           <div className="flex items-center gap-2">
-            <Badge
-              className={SubframeUtils.twClassNames({ hidden: boolean })}
-              variant="variation"
-            >
-              NationGraph
-            </Badge>
-            <Badge
-              className={SubframeUtils.twClassNames("hidden", {
-                flex: boolean,
-              })}
-              variant={boolean ? "variation-2" : "variation"}
-            >
-              NationGraph
-            </Badge>
-            <div className="hidden h-1 w-1 flex-none flex-col items-center gap-2 rounded-full bg-subtext-color" />
-            <div className="flex h-6 w-px flex-none flex-col items-center gap-2 rounded-full bg-neutral-border" />
-            <div className="flex items-center gap-1">
-              <Badge variant="neutral" icon={<FeatherTag />}>
-                Work
+            {category && String(category).trim().toLowerCase() !== 'none' ? (
+              <Badge
+                className={SubframeUtils.twClassNames({ hidden: false })}
+                variant="variation"
+              >
+                {category}
               </Badge>
-              <Badge variant="neutral" icon={<FeatherTag />}>
-                Marketing
-              </Badge>
-              <Badge variant="neutral" icon={<FeatherTag />}>
-                Quantum Computing
-              </Badge>
-            </div>
-            <div className="flex h-6 w-px flex-none flex-col items-center gap-2 rounded-full bg-neutral-border" />
+            ) : null}
+            {tags && tags.length > 0 ? (
+              <>
+                <div className="flex h-6 w-px flex-none flex-col items-center gap-2 rounded-full bg-neutral-border" />
+                <div className="flex items-center gap-1">
+                  {tags.map((tag) => (
+                    <Badge key={tag} variant="neutral" icon={<FeatherTag />}>
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex h-6 w-px flex-none flex-col items-center gap-2 rounded-full bg-neutral-border" />
+              </>
+            ) : null}
             <div className="flex items-center gap-1">
               <FeatherClock className="text-body font-body text-subtext-color" />
               {text ? (
@@ -102,23 +117,32 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
               { "flex-col flex-nowrap gap-2": boolean }
             )}
           >
-            {text2 ? (
+            {titleText ? (
               <span className="line-clamp-1 w-full text-body-bold font-body-bold text-default-font">
-                {text2}
+                {titleText}
               </span>
             ) : null}
-            {text2 ? (
-              <span className="line-clamp-1 w-full text-body font-body text-subtext-color">
-                {text2}
+            {contentText ? (
+              <span className="line-clamp-2 w-full text-body font-body text-subtext-color">
+                {contentText}
               </span>
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div
+          className={SubframeUtils.twClassNames(
+            "flex items-center gap-2 transition-opacity",
+            {
+              "opacity-0 pointer-events-none group-hover/8f873461:opacity-100 group-hover/8f873461:pointer-events-auto":
+                hoverActions,
+            }
+          )}
+        >
           <Button
             className={SubframeUtils.twClassNames({ flex: boolean })}
             variant="brand-tertiary"
             icon={boolean ? <FeatherSparkle /> : <FeatherCopy />}
+            onClick={boolean ? onCreateTemplate : undefined}
           >
             {boolean ? "Create template" : "Copy template"}
           </Button>

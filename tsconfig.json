@@ -22,8 +22,14 @@
     /* Import aliases */
     "baseUrl": "./",
     "paths": {
+      "@/*": [
+        "./src/*"
+      ],
       "@/ui/*": [
         "./src/ui/*"
+      ],
+      "@/lib/*": [
+        "./src/lib/*"
       ]
     }
   },

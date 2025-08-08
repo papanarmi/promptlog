@@ -12,6 +12,9 @@ import { IconButton } from "../components/IconButton";
 import { FeatherSettings } from "@subframe/core";
 import { FeatherUser } from "@subframe/core";
 import { TopbarWithCenterNav } from "../components/TopbarWithCenterNav";
+import { supabase } from "@/lib/supabaseClient";
+import { Link, useNavigate } from "react-router-dom";
+import { FeatherLogOut } from "@subframe/core";
 
 interface DefaultPageLayoutRootProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -26,6 +29,12 @@ const DefaultPageLayoutRoot = React.forwardRef<
   { children, className, ...otherProps }: DefaultPageLayoutRootProps,
   ref
 ) {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div
       className={SubframeUtils.twClassNames(
@@ -37,14 +46,17 @@ const DefaultPageLayoutRoot = React.forwardRef<
     >
       <TopbarWithCenterNav
         leftSlot={
-          <img
-            className="h-5 flex-none object-cover"
-            src="https://res.cloudinary.com/subframe/image/upload/v1711417507/shared/y2rsnhq3mex4auk54aye.png"
-          />
+          <Link to="/">
+            <img
+              className="h-5 flex-none object-cover"
+              src="https://res.cloudinary.com/subframe/image/upload/v1711417507/shared/y2rsnhq3mex4auk54aye.png"
+            />
+          </Link>
         }
         rightSlot={
           <>
             <IconButton size="large" icon={<FeatherSettings />} />
+            <IconButton size="large" icon={<FeatherLogOut />} onClick={handleLogout} />
             <IconButton size="large" icon={<FeatherUser />} />
           </>
         }

@@ -28,6 +28,11 @@ interface TemplateAdditionalDetailsRootProps
   text4?: React.ReactNode;
   text5?: React.ReactNode;
   className?: string;
+  collectionValue?: string;
+  tagsValue?: string[];
+  readOnly?: boolean;
+  onChangeCollection?: (value: string) => void;
+  onChangeTags?: (tags: string[]) => void;
 }
 
 const TemplateAdditionalDetailsRoot = React.forwardRef<
@@ -41,6 +46,11 @@ const TemplateAdditionalDetailsRoot = React.forwardRef<
     text4,
     text5,
     className,
+    collectionValue,
+    tagsValue,
+    readOnly = false,
+    onChangeCollection,
+    onChangeTags,
     ...otherProps
   }: TemplateAdditionalDetailsRootProps,
   ref
@@ -78,7 +88,13 @@ const TemplateAdditionalDetailsRoot = React.forwardRef<
             icon={<FeatherFolder />}
             iconRight={<FeatherChevronDown />}
           >
-            <TextField.Input placeholder="Select or create collection..." />
+            <TextField.Input
+              placeholder="Select or create collection..."
+              value={collectionValue}
+              onChange={(e) => onChangeCollection?.(e.target.value)}
+              readOnly={readOnly}
+              className={readOnly ? "opacity-70" : undefined}
+            />
           </TextField>
         </div>
         <div className="flex w-full flex-col items-start gap-2">
@@ -92,19 +108,21 @@ const TemplateAdditionalDetailsRoot = React.forwardRef<
           </div>
           <TextArea className="h-auto w-full flex-none" label="" helpText="">
             <div className="flex min-h-[64px] w-full flex-wrap items-start gap-2 px-2 py-1.5">
-              <Badge variant="neutral" icon={<FeatherTag />}>
-                Writing
-              </Badge>
-              <Badge variant="neutral" icon={<FeatherTag />}>
-                Analysis
-              </Badge>
-              <Button
-                variant="neutral-tertiary"
-                size="small"
-                icon={<FeatherPlus />}
-              >
-                Add tag
-              </Button>
+              {(tagsValue || []).map((tag) => (
+                <Badge key={tag} variant="neutral" icon={<FeatherTag />}> 
+                  {tag}
+                </Badge>
+              ))}
+              {!readOnly ? (
+                <Button
+                  variant="neutral-tertiary"
+                  size="small"
+                  icon={<FeatherPlus />}
+                  onClick={() => onChangeTags?.([...(tagsValue || []), ""]) }
+                >
+                  Add tag
+                </Button>
+              ) : null}
             </div>
           </TextArea>
         </div>

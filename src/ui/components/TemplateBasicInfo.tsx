@@ -30,6 +30,14 @@ interface TemplateBasicInfoRootProps
   text7?: React.ReactNode;
   text8?: React.ReactNode;
   className?: string;
+  // Controlled values and handlers (optional)
+  titleValue?: string;
+  descriptionValue?: string;
+  promptValue?: string;
+  readOnly?: boolean;
+  onChangeTitle?: (value: string) => void;
+  onChangeDescription?: (value: string) => void;
+  onChangePrompt?: (value: string) => void;
 }
 
 const TemplateBasicInfoRoot = React.forwardRef<
@@ -49,6 +57,13 @@ const TemplateBasicInfoRoot = React.forwardRef<
     text7,
     text8,
     className,
+    titleValue,
+    descriptionValue,
+    promptValue,
+    readOnly = false,
+    onChangeTitle,
+    onChangeDescription,
+    onChangePrompt,
     ...otherProps
   }: TemplateBasicInfoRootProps,
   ref
@@ -100,7 +115,13 @@ const TemplateBasicInfoRoot = React.forwardRef<
             ) : null}
           </div>
           <TextField className="h-auto w-full flex-none" label="" helpText="">
-            <TextField.Input placeholder="Enter a title..." />
+            <TextField.Input
+              placeholder="Enter a title..."
+              value={titleValue}
+              onChange={(e) => onChangeTitle?.(e.target.value)}
+              readOnly={readOnly}
+              className={readOnly ? "opacity-70" : undefined}
+            />
           </TextField>
         </div>
         <div className="flex w-full flex-col items-start gap-2">
@@ -118,8 +139,11 @@ const TemplateBasicInfoRoot = React.forwardRef<
           </div>
           <TextArea className="h-auto w-full flex-none" label="" helpText="">
             <TextArea.Input
-              className="h-auto min-h-[64px] w-full flex-none"
+              className="h-auto min-h-[64px] w-full flex-none opacity-70"
               placeholder="Add context about this prompt..."
+              value={descriptionValue}
+              onChange={(e) => onChangeDescription?.(e.target.value)}
+              readOnly={readOnly}
             />
           </TextArea>
         </div>
@@ -157,11 +181,15 @@ const TemplateBasicInfoRoot = React.forwardRef<
           </div>
           <TextArea className="h-auto w-full flex-none" label="" helpText="">
             <TextArea.Input
-              className="h-auto min-h-[256px] w-full flex-none"
+              className="h-auto min-h-[256px] w-full flex-none opacity-70"
               placeholder="Write your prompt..."
+              value={promptValue}
+              onChange={(e) => onChangePrompt?.(e.target.value)}
+              readOnly={readOnly}
             />
           </TextArea>
-          <div className="flex w-full flex-col items-start gap-4 rounded-md border border-solid border-neutral-border bg-neutral-50 px-4 py-3">
+          {/* Optional helper card; hide in view-only drawer */}
+          <div className="hidden">
             <div className="flex items-center gap-1">
               {icon3 ? (
                 <SubframeCore.IconWrapper className="text-heading-3 font-heading-3 text-brand-700">

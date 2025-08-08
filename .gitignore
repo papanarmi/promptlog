@@ -27,3 +27,6 @@ dist-ssr
 .cursor/
 .mcp.json
 mcp.json
+
+# Local docs (do not commit)
+docs/app-routing-and-next-steps.md

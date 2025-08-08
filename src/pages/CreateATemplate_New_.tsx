@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { DrawerLayout } from "@/ui/layouts/DrawerLayout";
 import { TemplateBasicInfo } from "@/ui/components/TemplateBasicInfo";
 import { FeatherInfo } from "@subframe/core";
 import { FeatherLightbulb } from "@subframe/core";
 import { TemplateAdditionalDetails } from "@/ui/components/TemplateAdditionalDetails";
 import { Button } from "@/ui/components/Button";
+import { supabase } from "@/lib/supabaseClient";
+import { useSearchParams } from "react-router-dom";
 
 interface CreateATemplate_New_Props {
   open: boolean;
@@ -40,6 +42,31 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const fromId = searchParams.get('from');
+    const editId = searchParams.get('edit');
+    const id = editId || fromId;
+    if (!id || !open) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('prompt_logs')
+        .select('id, title, description, content, collection, tags')
+        .eq('id', id)
+        .maybeSingle();
+      if (!error && data) {
+        setFormData(prev => ({
+          ...prev,
+          title: data.title || prev.title,
+          description: (data as any).description || prev.description,
+          prompt: (data.content as string) || prev.prompt,
+          collection: (data as any).collection || prev.collection,
+          tags: (data.tags as string[]) || prev.tags,
+        }));
+      }
+    })();
+  }, [open, searchParams]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -88,14 +115,43 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
     }
 
     setIsSubmitting(true);
-    
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Here you would typically save to your database
-      console.log("Saving template:", formData);
-      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert("Please sign in to save templates.");
+        return;
+      }
+
+      const fromId = searchParams.get('from');
+      const editId = searchParams.get('edit');
+      if (editId) {
+        const { error } = await supabase
+          .from('prompt_logs')
+          .update({
+            title: formData.title,
+            description: formData.description,
+            content: formData.prompt,
+            collection: formData.collection,
+            tags: formData.tags,
+          })
+          .eq('id', editId)
+          .eq('kind','template');
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("prompt_logs").insert({
+        user_id: user.id,
+        title: formData.title,
+        description: formData.description,
+        content: formData.prompt,
+          collection: formData.collection,
+        tags: formData.tags,
+        kind: 'template',
+        source: 'web',
+        from_log_id: fromId
+        });
+        if (error) throw error;
+      }
+
       // Reset form and close drawer
       setFormData({
         title: "",
@@ -107,10 +163,7 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
       });
       setErrors({});
       onOpenChange(false);
-      
-      // You could add a success toast here
-      alert("Template saved successfully!");
-      
+      alert(editId ? "Template updated successfully!" : "Template saved successfully!");
     } catch (error) {
       console.error("Error saving template:", error);
       alert("Error saving template. Please try again.");

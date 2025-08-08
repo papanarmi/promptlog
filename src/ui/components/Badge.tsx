@@ -108,23 +108,25 @@ const BadgeRoot = React.forwardRef<HTMLDivElement, BadgeRootProps>(
             {icon}
           </SubframeCore.IconWrapper>
         ) : null}
-        <span
-          className={SubframeUtils.twClassNames(
-            "whitespace-nowrap text-caption font-caption text-brand-800",
-            {
-              "text-caption-bold font-caption-bold text-subtext-color":
-                variant === "variation-2",
-              "text-caption-bold font-caption-bold text-[#d7a604ff]":
-                variant === "variation",
-              "text-success-800": variant === "success",
-              "text-warning-800": variant === "warning",
-              "text-error-800": variant === "error",
-              "text-neutral-700": variant === "neutral",
-            }
-          )}
-        >
-          {variant === "variation-2" ? "None" : "Collection"}
-        </span>
+        {children ? (
+          <span
+            className={SubframeUtils.twClassNames(
+              "whitespace-nowrap text-caption font-caption text-brand-800",
+              {
+                "text-caption-bold font-caption-bold text-subtext-color":
+                  variant === "variation-2",
+                "text-caption-bold font-caption-bold text-[#d7a604ff]":
+                  variant === "variation",
+                "text-success-800": variant === "success",
+                "text-warning-800": variant === "warning",
+                "text-error-800": variant === "error",
+                "text-neutral-700": variant === "neutral",
+              }
+            )}
+          >
+            {children}
+          </span>
+        ) : null}
         {iconRight ? (
           <SubframeCore.IconWrapper
             className={SubframeUtils.twClassNames(

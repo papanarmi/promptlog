@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { DefaultPageLayout } from "@/ui/layouts/DefaultPageLayout";
 import { IconButton } from "@/ui/components/IconButton";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FeatherDownload } from "@subframe/core";
 import { Button } from "@/ui/components/Button";
 import { FeatherSparkle } from "@subframe/core";
@@ -22,12 +23,24 @@ import { FeatherPlus } from "@subframe/core";
 import { Feed } from "@/ui/components/Feed";
 import { FeatherChevronLeft } from "@subframe/core";
 import { FeatherChevronRight } from "@subframe/core";
+import { supabase } from "@/lib/supabaseClient";
 
-interface PromptLogOverviewProps {
-  onOpenTemplateDrawer: () => void;
-}
+function PromptLogOverview() {
+  const [promptCount, setPromptCount] = useState<number | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isTemplatesTab = location.pathname.startsWith('/templates');
 
-function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
+  useEffect(() => {
+    (async () => {
+      const { count, error } = await supabase
+        .from("prompt_logs")
+        .select("*", { count: "exact", head: true })
+        .eq('kind','log');
+      if (!error) setPromptCount(count ?? 0);
+    })();
+  }, []);
+
   return (
     <DefaultPageLayout>
       <div className="container max-w-none flex h-full w-full flex-col items-start">
@@ -49,21 +62,18 @@ function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
                   icon={null}
                   iconRight={null}
                   loading={false}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+                  onClick={() => navigate('/collections/new')}
                 >
                   Create a collection
                 </Button>
-                <Button
-                  icon={<FeatherSparkle />}
-                  onClick={onOpenTemplateDrawer}
-                >
+                <Button icon={<FeatherSparkle />} onClick={() => navigate('/templates/new')}>
                   Create a blank template
                 </Button>
               </div>
             </div>
             <Stats
               text="Total prompts"
-              text2="156"
+              text2={promptCount === null ? "…" : String(promptCount)}
               text3="Favorite prompts"
               text4="23"
               text5="Tagged prompts"
@@ -105,12 +115,17 @@ function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
                   <div className="flex w-full items-center">
                     <Tabs>
                       <Tabs.Item
-                        active={true}
+                        active={!isTemplatesTab}
                         icon={<FeatherTableProperties />}
+                        onClick={() => navigate('/')}
                       >
                         Overview
                       </Tabs.Item>
-                      <Tabs.Item icon={<FeatherSparkles />}>
+                      <Tabs.Item
+                        active={isTemplatesTab}
+                        icon={<FeatherSparkles />}
+                        onClick={() => navigate('/templates')}
+                      >
                         My templates
                       </Tabs.Item>
                     </Tabs>
@@ -122,9 +137,7 @@ function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
                         icon={<FeatherLayoutGrid />}
                         iconRight={null}
                         loading={false}
-                        onClick={(
-                          event: React.MouseEvent<HTMLButtonElement>
-                        ) => {}}
+                        onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
                       />
                       <Button
                         disabled={false}
@@ -133,9 +146,7 @@ function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
                         icon={<FeatherTable2 />}
                         iconRight={null}
                         loading={false}
-                        onClick={(
-                          event: React.MouseEvent<HTMLButtonElement>
-                        ) => {}}
+                        onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
                       />
                     </div>
                   </div>
@@ -143,29 +154,25 @@ function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
                     <PlSearchBar />
                     <div className="flex w-full flex-wrap items-center gap-2">
                       <Badge icon={<FeatherTag />}>Writing</Badge>
-                      <Badge variant="neutral" icon={<FeatherTag />}>
-                        Code
-                      </Badge>
-                      <Badge variant="neutral" icon={<FeatherTag />}>
-                        Analysis
-                      </Badge>
-                      <Badge variant="neutral" icon={<FeatherTag />}>
-                        Translation
-                      </Badge>
+                      <Badge variant="neutral" icon={<FeatherTag />}>Code</Badge>
+                      <Badge variant="neutral" icon={<FeatherTag />}>Analysis</Badge>
+                      <Badge variant="neutral" icon={<FeatherTag />}>Translation</Badge>
                       <Button
                         variant="neutral-tertiary"
                         size="small"
                         icon={<FeatherPlus />}
-                        onClick={(
-                          event: React.MouseEvent<HTMLButtonElement>
-                        ) => {}}
+                        onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
                       >
                         Add tag
                       </Button>
                     </div>
                   </div>
                 </div>
-                <Feed text="Today" text2="Yesterday" overview={true} />
+                {isTemplatesTab ? (
+                  <Feed text="Today" text2="Yesterday" kind="template" overview={true} />
+                ) : (
+                  <Feed text="Today" text2="Yesterday" kind="log" overview={true} />
+                )}
                 <div className="flex w-full items-center justify-center gap-4">
                   <span className="grow shrink-0 basis-0 text-body font-body text-subtext-color">
                     Showing 1 – 10 of 30
@@ -174,18 +181,14 @@ function PromptLogOverview({ onOpenTemplateDrawer }: PromptLogOverviewProps) {
                     <Button
                       variant="brand-tertiary"
                       icon={<FeatherChevronLeft />}
-                      onClick={(
-                        event: React.MouseEvent<HTMLButtonElement>
-                      ) => {}}
+                      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
                     >
                       Prev
                     </Button>
                     <Button
                       variant="brand-tertiary"
                       iconRight={<FeatherChevronRight />}
-                      onClick={(
-                        event: React.MouseEvent<HTMLButtonElement>
-                      ) => {}}
+                      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
                     >
                       Next
                     </Button>
