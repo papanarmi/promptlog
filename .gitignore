@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# MCP and Cursor local config
+.cursor/
+.mcp.json
+mcp.json
