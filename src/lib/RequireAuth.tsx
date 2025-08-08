@@ -2,6 +2,7 @@ import React, { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader } from '@/ui/components/Loader';
+import { InactivityLogout } from '@/lib/InactivityLogout';
 
 interface RequireAuthProps {
   children: ReactNode;
@@ -35,5 +36,10 @@ export default function RequireAuth({ children }: RequireAuthProps) {
       </div>
     );
   if (!signedIn) return <Navigate to="/login" replace state={{ from: location }} />;
-  return <>{children}</>;
+  return (
+    <>
+      <InactivityLogout />
+      {children}
+    </>
+  );
 }
