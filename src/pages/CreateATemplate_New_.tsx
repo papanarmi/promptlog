@@ -138,18 +138,27 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
           .eq('kind','template');
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("prompt_logs").insert({
-        user_id: user.id,
-        title: formData.title,
-        description: formData.description,
-        content: formData.prompt,
-          collection: formData.collection,
-        tags: formData.tags,
-        kind: 'template',
-        source: 'web',
-        from_log_id: fromId
-        });
+        const { data: created, error } = await supabase
+          .from("prompt_logs")
+          .insert({
+            user_id: user.id,
+            title: formData.title,
+            description: formData.description,
+            content: formData.prompt,
+            collection: formData.collection,
+            tags: formData.tags,
+            kind: 'template',
+            source: 'web',
+            from_log_id: fromId
+          })
+          .select('id, created_at, title, content, collection, tags')
+          .single();
         if (error) throw error;
+        try {
+          if (created) {
+            window.dispatchEvent(new CustomEvent('template-created', { detail: created }));
+          }
+        } catch {}
       }
 
       // Reset form and close drawer

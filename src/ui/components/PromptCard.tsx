@@ -38,6 +38,7 @@ interface PromptCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
   hoverActions?: boolean;
   className?: string;
   onCreateTemplate?: () => void;
+  onCopyTemplate?: () => void;
 }
 
 const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
@@ -53,6 +54,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
       hoverActions = false,
       className,
       onCreateTemplate,
+      onCopyTemplate,
       ...otherProps
     }: PromptCardRootProps,
     ref
@@ -142,13 +144,19 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
             className={SubframeUtils.twClassNames({ flex: boolean })}
             variant="brand-tertiary"
             icon={boolean ? <FeatherSparkle /> : <FeatherCopy />}
-            onClick={boolean ? onCreateTemplate : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (boolean) onCreateTemplate?.();
+              else onCopyTemplate?.();
+            }}
           >
             {boolean ? "Create template" : "Copy template"}
           </Button>
           <SubframeCore.DropdownMenu.Root>
             <SubframeCore.DropdownMenu.Trigger asChild={true}>
-              <IconButton icon={<FeatherMoreVertical />} />
+              <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                <IconButton icon={<FeatherMoreVertical />} />
+              </div>
             </SubframeCore.DropdownMenu.Trigger>
             <SubframeCore.DropdownMenu.Portal>
               <SubframeCore.DropdownMenu.Content
@@ -158,7 +166,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
                 asChild={true}
               >
                 <DropdownMenu>
-                  <DropdownMenu.DropdownItem icon={<FeatherCopy />}>
+                  <DropdownMenu.DropdownItem icon={<FeatherCopy />} onClick={(e) => { e.stopPropagation(); try { navigator.clipboard.writeText(String(contentText || "")); } catch {} }}>
                     Copy prompt
                   </DropdownMenu.DropdownItem>
                   <DropdownMenu.DropdownItem icon={<FeatherHeart />}>

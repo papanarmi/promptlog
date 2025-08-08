@@ -114,13 +114,14 @@ const TemplateBasicInfoRoot = React.forwardRef<
               </SubframeCore.Tooltip.Provider>
             ) : null}
           </div>
-          <TextField className="h-auto w-full flex-none" label="" helpText="">
+          <TextField className={SubframeUtils.twClassNames("h-auto w-full flex-none", readOnly ? "pointer-events-none select-none" : undefined)} label="" helpText="" variant={readOnly ? "filled" : "outline"}>
             <TextField.Input
               placeholder="Enter a title..."
               value={titleValue}
               onChange={(e) => onChangeTitle?.(e.target.value)}
               readOnly={readOnly}
-              className={readOnly ? "opacity-70" : undefined}
+              className={readOnly ? "opacity-70 pointer-events-none select-none" : undefined}
+              tabIndex={readOnly ? -1 : 0}
             />
           </TextField>
         </div>
@@ -137,13 +138,14 @@ const TemplateBasicInfoRoot = React.forwardRef<
               </span>
             ) : null}
           </div>
-          <TextArea className="h-auto w-full flex-none" label="" helpText="">
+          <TextArea className={SubframeUtils.twClassNames("h-auto w-full flex-none", readOnly ? "pointer-events-none select-none" : undefined)} label="" helpText="" variant={readOnly ? "filled" : "outline"}>
             <TextArea.Input
-              className="h-auto min-h-[64px] w-full flex-none opacity-70"
+              className="h-auto min-h-[64px] w-full flex-none opacity-70 pointer-events-none select-none"
               placeholder="Add context about this prompt..."
               value={descriptionValue}
               onChange={(e) => onChangeDescription?.(e.target.value)}
               readOnly={readOnly}
+              tabIndex={readOnly ? -1 : 0}
             />
           </TextArea>
         </div>
@@ -179,13 +181,14 @@ const TemplateBasicInfoRoot = React.forwardRef<
               </SubframeCore.Tooltip.Provider>
             ) : null}
           </div>
-          <TextArea className="h-auto w-full flex-none" label="" helpText="">
+          <TextArea className={SubframeUtils.twClassNames("h-auto w-full flex-none", readOnly ? "pointer-events-none select-none" : undefined)} label="" helpText="" variant={readOnly ? "filled" : "outline"}>
             <TextArea.Input
-              className="h-auto min-h-[256px] w-full flex-none opacity-70"
+              className="h-auto min-h-[256px] w-full flex-none opacity-70 pointer-events-none select-none"
               placeholder="Write your prompt..."
               value={promptValue}
               onChange={(e) => onChangePrompt?.(e.target.value)}
               readOnly={readOnly}
+              tabIndex={readOnly ? -1 : 0}
             />
           </TextArea>
           {/* Optional helper card; hide in view-only drawer */}

@@ -37,21 +37,69 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
         .limit(50);
       setItems(data || []);
     })();
+    const onUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { id: string; title: string; content: string; collection: string | null; tags: string[] };
+      if (!detail) return;
+      setItems((prev) => prev.map((it) => (it.id === detail.id ? { ...it, ...detail } : it)));
+    };
+    window.addEventListener('template-updated', onUpdated as EventListener);
+    const onCreated = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { id: string; created_at: string; title: string; content: string; collection: string | null; tags: string[] };
+      if (!detail) return;
+      setItems((prev) => {
+        // avoid duplicates
+        if (prev.find((p) => p.id === detail.id)) return prev;
+        return [detail, ...prev].slice(0, 50);
+      });
+    };
+    window.addEventListener('template-created', onCreated as EventListener);
+    return () => {
+      window.removeEventListener('template-updated', onUpdated as EventListener);
+      window.removeEventListener('template-created', onCreated as EventListener);
+    };
   }, [kind]);
 
   const grouped = useMemo(() => {
+    const startOfDayKey = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    const toDate = (key: string) => {
+      const [y, m, d] = key.split('-').map((s) => parseInt(s, 10));
+      return new Date(y, m - 1, d);
+    };
     const today = new Date();
-    const isSameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const todayItems: typeof items = [];
-    const yesterdayItems: typeof items = [];
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    const map = new Map<string, typeof items>();
     for (const it of items) {
       const d = new Date(it.created_at);
-      if (isSameDay(d, today)) todayItems.push(it);
-      else if (isSameDay(d, yesterday)) yesterdayItems.push(it);
+      const key = startOfDayKey(d);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(it);
     }
-    return { todayItems, yesterdayItems };
+    const suffix = (n: number) => {
+      if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+      switch (n % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+      }
+    };
+    const monthShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const labelFor = (date: Date) => {
+      const tKey = startOfDayKey(today);
+      const yKey = startOfDayKey(yesterday);
+      const k = startOfDayKey(date);
+      if (k === tKey) return 'Today';
+      if (k === yKey) return 'Yesterday';
+      const day = date.getDate();
+      return `${day}${suffix(day)} ${monthShort[date.getMonth()]}`;
+    };
+    const keys = Array.from(map.keys()).sort((a, b) => toDate(b).getTime() - toDate(a).getTime());
+    return keys.map((key) => ({ label: labelFor(toDate(key)), items: map.get(key)! }));
   }, [items]);
 
   const formatRelative = (iso: string) => {
@@ -106,48 +154,32 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
         ref={ref}
         {...otherProps}
       >
-        <div className="flex w-full flex-col items-start gap-4">
-          {text ? (
-            <span className="text-heading-3 font-heading-3 text-subtext-color">
-              {text}
-            </span>
-          ) : null}
-          {(grouped.todayItems.length ? grouped.todayItems : []).map((it) => (
-            <PromptCard
-              key={it.id}
-              text={formatRelative(it.created_at)}
-              titleText={it.title}
-              contentText={it.content}
-              boolean={overview ? true : undefined}
-              category={cleanCollection(it.collection)}
-              tags={normalizeTags(it.tags)}
-              hoverActions={true}
-              onClick={() => navigate(`/templates/${it.id}`)}
-              onCreateTemplate={() => overview && navigate(`/templates/new?from=${it.id}`)}
-            />
-          ))}
-        </div>
-        <div className="flex w-full flex-col items-start gap-4">
-          {text2 ? (
-            <span className="text-heading-3 font-heading-3 text-subtext-color">
-              {text2}
-            </span>
-          ) : null}
-          {(grouped.yesterdayItems.length ? grouped.yesterdayItems : []).map((it) => (
-            <PromptCard
-              key={it.id}
-              text={formatRelative(it.created_at)}
-              titleText={it.title}
-              contentText={it.content}
-              boolean={overview ? true : undefined}
-              category={cleanCollection(it.collection)}
-              tags={normalizeTags(it.tags)}
-              hoverActions={true}
-              onClick={() => navigate(`/templates/${it.id}`)}
-              onCreateTemplate={() => overview && navigate(`/templates/new?from=${it.id}`)}
-            />
-          ))}
-        </div>
+        {grouped.map((group) => (
+          <div key={group.label} className="flex w-full flex-col items-start gap-4">
+            {group.items.length ? (
+              <span className="text-heading-3 font-heading-3 text-subtext-color">{group.label}</span>
+            ) : null}
+            {group.items.map((it) => (
+              <PromptCard
+                key={it.id}
+                text={formatRelative(it.created_at)}
+                titleText={it.title}
+                contentText={it.content}
+                boolean={kind !== 'template' && overview ? true : false}
+                category={cleanCollection(it.collection)}
+                tags={normalizeTags(it.tags)}
+                hoverActions={true}
+                onClick={() => navigate(`/templates/${it.id}`)}
+                onCreateTemplate={() => overview && navigate(`/templates/new?from=${it.id}`)}
+                onCopyTemplate={() => {
+                  try {
+                    navigator.clipboard.writeText(it.content || "");
+                  } catch {}
+                }}
+              />
+            ))}
+          </div>
+        ))}
       </div>
     );
   }

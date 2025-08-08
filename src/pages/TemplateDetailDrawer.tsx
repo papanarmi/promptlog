@@ -5,8 +5,7 @@ import { DrawerLayout } from "@/ui/layouts/DrawerLayout";
 import { Button } from "@/ui/components/Button";
 import { TemplateBasicInfo } from "@/ui/components/TemplateBasicInfo";
 import { TemplateAdditionalDetails } from "@/ui/components/TemplateAdditionalDetails";
-import { TextField } from "@/ui/components/TextField";
-import { TextArea } from "@/ui/components/TextArea";
+// inputs are rendered within the UI components
 import { supabase } from "@/lib/supabaseClient";
 // view-only drawer; routing handled by parent
 
@@ -75,7 +74,53 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange }:
     return `${y}yr ago`;
   };
 
-  // view-only; editing will be added later
+  const [isEditing, setIsEditing] = useState(false);
+
+  const handleCancel = () => {
+    if (!row) return onOpenChange(false);
+    setForm({
+      title: row.title || "",
+      description: row.description || "",
+      content: row.content || "",
+      collection: row.collection || "",
+      tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    });
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!row) return;
+    setLoading(true);
+    const { error } = await supabase
+      .from('prompt_logs')
+      .update({
+        title: form.title,
+        description: form.description,
+        content: form.content,
+        collection: form.collection,
+        tags: form.tags,
+      })
+      .eq('id', row.id)
+      .eq('kind','template');
+    setLoading(false);
+    if (!error) {
+      setRow({ ...row, ...form });
+      setIsEditing(false);
+      try {
+        window.dispatchEvent(
+          new CustomEvent('template-updated', {
+            detail: {
+              id: row.id,
+              title: form.title,
+              content: form.content,
+              collection: form.collection,
+              tags: form.tags,
+            },
+          })
+        );
+      } catch {}
+    }
+  };
 
   return (
     <DrawerLayout open={open} onOpenChange={onOpenChange}>
@@ -93,7 +138,10 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange }:
             titleValue={form.title}
             descriptionValue={form.description}
             promptValue={form.content}
-            readOnly={true}
+            readOnly={!isEditing}
+            onChangeTitle={(v) => setForm((f) => ({ ...f, title: v }))}
+            onChangeDescription={(v) => setForm((f) => ({ ...f, description: v }))}
+            onChangePrompt={(v) => setForm((f) => ({ ...f, content: v }))}
           />
 
           {/* read-only view; extra summary block removed */}
@@ -104,7 +152,9 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange }:
             text5="Tags"
             collectionValue={form.collection}
             tagsValue={form.tags}
-            readOnly={true}
+            readOnly={!isEditing}
+            onChangeCollection={(v) => setForm((f) => ({ ...f, collection: v }))}
+            onChangeTags={(tags) => setForm((f) => ({ ...f, tags }))}
           />
 
           <div className="w-full -mt-6 px-6">
@@ -115,8 +165,17 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange }:
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="neutral-tertiary" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button onClick={() => { /* enable editing later */ }} disabled={loading}>Edit template</Button>
+          {isEditing ? (
+            <>
+              <Button variant="neutral-tertiary" onClick={handleCancel} disabled={loading}>Cancel</Button>
+              <Button onClick={handleSave} loading={loading} disabled={loading}>Save template</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="neutral-tertiary" onClick={() => onOpenChange(false)}>Close</Button>
+              <Button onClick={() => setIsEditing(true)} disabled={loading}>Edit template</Button>
+            </>
+          )}
         </div>
       </div>
     </DrawerLayout>
