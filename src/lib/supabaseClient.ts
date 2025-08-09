@@ -16,3 +16,17 @@ export const supabase = createClient(
     },
   }
 );
+
+// Broadcast session changes to extension (best effort)
+try {
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    try {
+      if (session?.access_token && session?.refresh_token) {
+        // Notify any extension content scripts to link the session
+        window.postMessage({ type: 'pl-link-session', payload: { access_token: session.access_token, refresh_token: session.refresh_token } }, '*');
+      } else {
+        window.postMessage({ type: 'pl-clear-session' }, '*');
+      }
+    } catch {}
+  });
+} catch {}
