@@ -17,25 +17,37 @@ interface FeedRootProps extends React.HTMLAttributes<HTMLDivElement> {
   overview?: boolean;
   kind?: 'log' | 'template';
   className?: string;
+  page?: number;
+  pageSize?: number;
+  onCount?: (n: number) => void;
 }
 
 const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
   function FeedRoot(
-    { text, text2, overview = false, kind = 'log', className, ...otherProps }: FeedRootProps,
+    { text, text2, overview = false, kind = 'log', className, page = 1, pageSize = 10, onCount, ...otherProps }: FeedRootProps,
     ref
   ) {
   const navigate = useNavigate();
   const [items, setItems] = useState<Array<{ id: string; created_at: string; title: string; content: string; collection: string | null; tags: string[] }>>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, count, error } = await supabase
         .from('prompt_logs')
-        .select('id, created_at, title, content, collection, tags')
+        .select('id, created_at, title, content, collection, tags', { count: 'exact' })
         .eq('kind', kind)
         .order('created_at', { ascending: false })
-        .limit(50);
-      setItems(data || []);
+        .range(from, to);
+      if (!error) {
+        setItems(data || []);
+        if (typeof count === 'number') {
+          setTotalCount(count);
+          onCount?.(count);
+        }
+      }
     })();
     const onUpdated = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id: string; title: string; content: string; collection: string | null; tags: string[] };
@@ -43,21 +55,38 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
       setItems((prev) => prev.map((it) => (it.id === detail.id ? { ...it, ...detail } : it)));
     };
     window.addEventListener('template-updated', onUpdated as EventListener);
+    const onRemoved = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { id: string };
+      if (!detail) return;
+      setItems((prev) => prev.filter((it) => it.id !== detail.id));
+      setTotalCount((t) => {
+        const v = Math.max(0, t - 1);
+        onCount?.(v);
+        return v;
+      });
+    };
+    window.addEventListener('template-removed', onRemoved as EventListener);
     const onCreated = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id: string; created_at: string; title: string; content: string; collection: string | null; tags: string[] };
       if (!detail) return;
       setItems((prev) => {
         // avoid duplicates
         if (prev.find((p) => p.id === detail.id)) return prev;
-        return [detail, ...prev].slice(0, 50);
+        return [detail, ...prev].slice(0, pageSize);
+      });
+      setTotalCount((t) => {
+        const v = t + 1;
+        onCount?.(v);
+        return v;
       });
     };
     window.addEventListener('template-created', onCreated as EventListener);
     return () => {
       window.removeEventListener('template-updated', onUpdated as EventListener);
       window.removeEventListener('template-created', onCreated as EventListener);
+      window.removeEventListener('template-removed', onRemoved as EventListener);
     };
-  }, [kind]);
+  }, [kind, page, pageSize]);
 
   const grouped = useMemo(() => {
     const startOfDayKey = (d: Date) => {
@@ -159,7 +188,7 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
             {group.items.length ? (
               <span className="text-heading-3 font-heading-3 text-subtext-color">{group.label}</span>
             ) : null}
-            {group.items.map((it) => (
+                {group.items.map((it) => (
               <PromptCard
                 key={it.id}
                 text={formatRelative(it.created_at)}
@@ -169,6 +198,8 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
                 category={cleanCollection(it.collection)}
                 tags={normalizeTags(it.tags)}
                 hoverActions={true}
+                id={it.id}
+                kind={kind}
                 onClick={() => navigate(`/templates/${it.id}`)}
                 onCreateTemplate={() => overview && navigate(`/templates/new?from=${it.id}`)}
                 onCopyTemplate={() => {

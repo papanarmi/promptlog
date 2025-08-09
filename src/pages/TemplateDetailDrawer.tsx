@@ -13,6 +13,7 @@ interface TemplateDetailDrawerProps {
   open: boolean;
   templateId: string;
   onOpenChange: (open: boolean) => void;
+  startInEdit?: boolean;
 }
 
 interface TemplateRow {
@@ -25,7 +26,7 @@ interface TemplateRow {
   created_at: string;
 }
 
-export default function TemplateDetailDrawer({ open, templateId, onOpenChange }: TemplateDetailDrawerProps) {
+export default function TemplateDetailDrawer({ open, templateId, onOpenChange, startInEdit = false }: TemplateDetailDrawerProps) {
   const [loading, setLoading] = useState(false);
   const [row, setRow] = useState<TemplateRow | null>(null);
   const [form, setForm] = useState({ title: "", description: "", content: "", collection: "", tags: [] as string[] });
@@ -75,6 +76,11 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange }:
   };
 
   const [isEditing, setIsEditing] = useState(false);
+
+  // Enter edit mode automatically when requested
+  useEffect(() => {
+    if (open && startInEdit) setIsEditing(true);
+  }, [open, startInEdit]);
 
   const handleCancel = () => {
     if (!row) return onOpenChange(false);
