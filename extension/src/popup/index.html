@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Promptlog</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: Inter, ui-sans-serif, system-ui, -apple-system; margin: 0; }
+      .wrap { width: 360px; padding: 12px; }
+      input, button { font: inherit; }
+      input { width: 100%; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px; }
+      button { padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; }
+      .row { display: flex; gap: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="authed" style="display:none; display: flex; flex-direction: column; gap: 8px;">
+        <div>
+          <div id="user-name" style="font-weight:600; color:#111827;">—</div>
+          <div id="user-email" style="color:#6b7280; font-size:12px;">—</div>
+        </div>
+        <div class="row">
+          <button id="open-profile">Profile</button>
+          <button id="open-settings">Settings</button>
+          <button id="logout">Logout</button>
+          <dialog id="confirm-dialog" style="border:1px solid #e5e7eb; border-radius: 8px; padding: 16px;">
+            <div style="font-weight:600; margin-bottom:8px;">Log out?</div>
+            <div style="color:#6b7280; font-size:12px; margin-bottom:12px;">You will be signed out of the extension and web app.</div>
+            <div class="row" style="justify-content:flex-end;">
+              <button id="confirm-no">No</button>
+              <button id="confirm-yes">Yes</button>
+            </div>
+          </dialog>
+        </div>
+      </div>
+      <div id="anon" style="display:flex; flex-direction: column; gap: 8px;">
+        <h3>Promptlog</h3>
+        <button id="open-login">Sign in</button>
+        <button id="open-signup">Sign up</button>
+        <div style="color: #6b7280; font-size: 12px;">Opens the web app in a new tab.</div>
+      </div>
+    </div>
+    <script type="module" src="./popup.tsx"></script>
+  </body>
+  </html>
+
+

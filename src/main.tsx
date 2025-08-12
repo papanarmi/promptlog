@@ -6,6 +6,7 @@ import "./index.css";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import UpdatePassword from "@/pages/UpdatePassword";
+import Logout from "@/pages/Logout";
 import RequireAuth from "@/lib/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
 import TemplateDetails from "@/pages/TemplateDetails";
@@ -40,6 +41,21 @@ function RedirectIfAuthed({ children }: { children: React.ReactElement }) {
   return children;
 }
 
+// Optional content-script listener to force webapp logout when requested by the extension
+try {
+  window.addEventListener('message', async (ev) => {
+    if (ev?.data?.type === 'pl-webapp-clear') {
+      try { await supabase.auth.signOut() } catch {}
+      try {
+        Object.keys(localStorage)
+          .filter((k) => k.startsWith('sb-'))
+          .forEach((k) => localStorage.removeItem(k))
+      } catch {}
+      window.location.replace('/login')
+    }
+  })
+} catch {}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
@@ -47,6 +63,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
         <Route path="/signup" element={<RedirectIfAuthed><Signup /></RedirectIfAuthed>} />
         <Route path="/update-password" element={<UpdatePassword />} />
+        <Route path="/logout" element={<Logout />} />
         <Route
           path="/"
           element={

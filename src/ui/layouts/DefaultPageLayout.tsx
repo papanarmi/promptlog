@@ -31,8 +31,17 @@ const DefaultPageLayoutRoot = React.forwardRef<
 ) {
   const navigate = useNavigate();
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/login", { replace: true });
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+    try {
+      // Hard clear any Supabase auth cache keys
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("sb-"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    // Redirect to dedicated logout route to ensure auth guard updates
+    navigate("/logout", { replace: true });
   };
 
   return (
