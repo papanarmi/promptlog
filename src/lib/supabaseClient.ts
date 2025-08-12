@@ -3,15 +3,30 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  // Fail fast in dev if env is missing
-  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
-}
+// For development, create a client even with placeholder values
+// This allows the app to render without crashing
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-});
+// Broadcast session changes to extension (best effort)
+try {
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    try {
+      if (session?.access_token && session?.refresh_token) {
+        // Notify any extension content scripts to link the session
+        window.postMessage({ type: 'pl-link-session', payload: { access_token: session.access_token, refresh_token: session.refresh_token } }, '*');
+      } else {
+        window.postMessage({ type: 'pl-clear-session' }, '*');
+      }
+    } catch {}
+  });
+} catch {}

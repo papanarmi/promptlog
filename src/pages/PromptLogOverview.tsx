@@ -27,19 +27,45 @@ import { supabase } from "@/lib/supabaseClient";
 
 function PromptLogOverview() {
   const [promptCount, setPromptCount] = useState<number | null>(null);
+  const [favoriteCount, setFavoriteCount] = useState<number | null>(null);
+  const [templateCount, setTemplateCount] = useState<number | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const isTemplatesTab = location.pathname.startsWith('/templates');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const [total, setTotal] = useState(0);
+  const endIndex = Math.min(page * pageSize, Math.max(total, 0));
 
   useEffect(() => {
-    (async () => {
-      const { count, error } = await supabase
-        .from("prompt_logs")
-        .select("*", { count: "exact", head: true })
-        .eq('kind','log');
-      if (!error) setPromptCount(count ?? 0);
-    })();
+    const refreshCounts = async () => {
+      const [allRes, favRes, tmplRes] = await Promise.all([
+        supabase.from('prompt_logs').select('*', { count: 'exact', head: true }),
+        supabase.from('prompt_logs').select('*', { count: 'exact', head: true }).contains('tags', ['favorite']),
+        supabase.from('prompt_logs').select('*', { count: 'exact', head: true }).eq('kind', 'template'),
+      ]);
+      if (!('error' in allRes) || !allRes.error) setPromptCount(allRes.count ?? 0);
+      if (!('error' in favRes) || !favRes.error) setFavoriteCount(favRes.count ?? 0);
+      if (!('error' in tmplRes) || !tmplRes.error) setTemplateCount(tmplRes.count ?? 0);
+    };
+    refreshCounts();
+    const onAnyChange = () => { refreshCounts(); };
+    window.addEventListener('template-created', onAnyChange);
+    window.addEventListener('template-updated', onAnyChange);
+    window.addEventListener('template-removed', onAnyChange);
+    window.addEventListener('template-soft-refresh', onAnyChange as EventListener);
+    return () => {
+      window.removeEventListener('template-created', onAnyChange);
+      window.removeEventListener('template-updated', onAnyChange);
+      window.removeEventListener('template-removed', onAnyChange);
+      window.removeEventListener('template-soft-refresh', onAnyChange as EventListener);
+    };
   }, []);
+
+  // Reset to first page when switching tabs
+  useEffect(() => {
+    setPage(1);
+  }, [isTemplatesTab]);
 
   return (
     <DefaultPageLayout>
@@ -75,9 +101,9 @@ function PromptLogOverview() {
               text="Total prompts"
               text2={promptCount === null ? "…" : String(promptCount)}
               text3="Favorite prompts"
-              text4="23"
-              text5="Tagged prompts"
-              text6="89"
+              text4={favoriteCount === null ? "…" : String(favoriteCount)}
+              text5="Templates"
+              text6={templateCount === null ? "…" : String(templateCount)}
             />
             <div className="flex w-full grow shrink-0 basis-0 items-start gap-8">
               <CustomComponent
@@ -169,26 +195,30 @@ function PromptLogOverview() {
                   </div>
                 </div>
                 {isTemplatesTab ? (
-                  <Feed text="Today" text2="Yesterday" kind="template" overview={true} />
+                  <Feed text="Today" text2="Yesterday" kind="template" overview={true} page={page} pageSize={pageSize} onCount={setTotal} />
                 ) : (
-                  <Feed text="Today" text2="Yesterday" kind="log" overview={true} />
+                  <Feed text="Today" text2="Yesterday" kind="log" overview={true} page={page} pageSize={pageSize} onCount={setTotal} />
                 )}
                 <div className="flex w-full items-center justify-center gap-4">
                   <span className="grow shrink-0 basis-0 text-body font-body text-subtext-color">
-                    Showing 1 – 10 of 30
+                    {total > 0
+                      ? `Showing ${(page - 1) * pageSize + 1} – ${endIndex} of ${total}`
+                      : `Showing 0 – 0 of 0`}
                   </span>
                   <div className="flex items-center justify-center gap-2">
                     <Button
                       variant="brand-tertiary"
                       icon={<FeatherChevronLeft />}
-                      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
                     >
                       Prev
                     </Button>
                     <Button
                       variant="brand-tertiary"
                       iconRight={<FeatherChevronRight />}
-                      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
+                      disabled={endIndex >= total}
+                      onClick={() => setPage((p) => (endIndex >= total ? p : p + 1))}
                     >
                       Next
                     </Button>

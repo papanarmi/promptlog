@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Promptlog Templates",
+  "version": "0.1.0",
+  "description": "Quickly insert template prompts into ChatGPT.",
+  "action": {
+    "default_title": "Promptlog",
+    "default_popup": "extension/src/popup/index.html"
+  },
+  "permissions": ["storage", "alarms", "clipboardWrite", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
+    "http://localhost:5173/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "http://localhost:5173/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
+
+

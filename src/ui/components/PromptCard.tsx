@@ -22,6 +22,8 @@ import { FeatherHeart } from "@subframe/core";
 import { FeatherTrash } from "@subframe/core";
 import { IconButton } from "./IconButton";
 import { FeatherMoreVertical } from "@subframe/core";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabaseClient";
 
 interface PromptCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
   // Small meta text on the right of badges (used for time string)
@@ -39,6 +41,9 @@ interface PromptCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
   onCreateTemplate?: () => void;
   onCopyTemplate?: () => void;
+  // Data id and kind for actions
+  id?: string;
+  kind?: 'log' | 'template';
 }
 
 const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
@@ -60,6 +65,85 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
     ref
   ) {
     const isClickable = typeof (otherProps as { onClick?: unknown }).onClick === 'function';
+    const navigate = useNavigate();
+    const [isFavorite, setIsFavorite] = React.useState<boolean>(Array.isArray(tags) && tags.includes('favorite'));
+    React.useEffect(() => {
+      setIsFavorite(Array.isArray(tags) && tags.includes('favorite'));
+    }, [tags]);
+
+    // Hide 'favorite' tag from the visible list; heart icon represents favorite state
+    const visibleTags: string[] = Array.isArray(tags)
+      ? (tags as string[]).filter((t) => t !== 'favorite')
+      : [];
+
+    const handleEdit = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const id = (otherProps as any).id as string | undefined;
+      if (!id) return;
+      navigate(`/templates/${id}`, { state: { edit: true } });
+    };
+
+    const handleAddFavorite = async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const id = (otherProps as any).id as string | undefined;
+      if (!id) return;
+      const currentTags = Array.isArray(tags) ? tags : [];
+      const nextTags = Array.from(new Set([...(currentTags || []), 'favorite']));
+      const { error } = await supabase
+        .from('prompt_logs')
+        .update({ tags: nextTags })
+        .eq('id', id);
+      if (!error) {
+        // inform feed to update this item
+        const detail = { id, title: String(titleText || ''), content: String(contentText || ''), collection: category ?? null, tags: nextTags } as any;
+        window.dispatchEvent(new CustomEvent('template-updated', { detail }));
+        // trigger a soft refresh for stats
+        window.dispatchEvent(new CustomEvent('template-soft-refresh'));
+      }
+    };
+
+    const handleRemoveFavorite = async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const id = (otherProps as any).id as string | undefined;
+      if (!id) return;
+      const currentTags = Array.isArray(tags) ? tags : [];
+      const nextTags = (currentTags || []).filter((t) => t !== 'favorite');
+      const { error } = await supabase
+        .from('prompt_logs')
+        .update({ tags: nextTags })
+        .eq('id', id);
+      if (!error) {
+        const detail = { id, title: String(titleText || ''), content: String(contentText || ''), collection: category ?? null, tags: nextTags } as any;
+        window.dispatchEvent(new CustomEvent('template-updated', { detail }));
+        window.dispatchEvent(new CustomEvent('template-soft-refresh'));
+      }
+    };
+
+    const handleRemove = async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const id = (otherProps as any).id as string | undefined;
+      if (!id) return;
+      // optional confirm
+      // if (!window.confirm('Remove this item?')) return;
+      const { error } = await supabase
+        .from('prompt_logs')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        window.dispatchEvent(new CustomEvent('template-removed', { detail: { id } }));
+        window.dispatchEvent(new CustomEvent('template-soft-refresh'));
+      }
+    };
+
+    const toggleFavorite = async (e: React.MouseEvent) => {
+      if (isFavorite) {
+        await handleRemoveFavorite(e);
+        setIsFavorite(false);
+      } else {
+        await handleAddFavorite(e);
+        setIsFavorite(true);
+      }
+    };
     return (
       <div
         className={SubframeUtils.twClassNames(
@@ -91,11 +175,11 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
                 {category}
               </Badge>
             ) : null}
-            {tags && tags.length > 0 ? (
+            {visibleTags && visibleTags.length > 0 ? (
               <>
                 <div className="flex h-6 w-px flex-none flex-col items-center gap-2 rounded-full bg-neutral-border" />
                 <div className="flex items-center gap-1">
-                  {tags.map((tag) => (
+                  {visibleTags.map((tag) => (
                     <Badge key={tag} variant="neutral" icon={<FeatherTag />}>
                       {tag}
                     </Badge>
@@ -133,7 +217,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
         </div>
         <div
           className={SubframeUtils.twClassNames(
-            "flex items-center gap-2 transition-opacity",
+            "flex items-center gap-1 transition-opacity",
             {
               "opacity-0 pointer-events-none group-hover/8f873461:opacity-100 group-hover/8f873461:pointer-events-auto":
                 hoverActions,
@@ -150,8 +234,31 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
               else onCopyTemplate?.();
             }}
           >
-            {boolean ? "Create template" : "Copy template"}
+            {boolean ? "Create template" : "Copy prompt"}
           </Button>
+          <IconButton
+            icon={
+              isFavorite ? (
+                <span className="text-red-500">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="1em"
+                    height="1em"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                  </svg>
+                </span>
+              ) : (
+                <FeatherHeart className="text-subtext-color" />
+              )
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(e);
+            }}
+          />
           <SubframeCore.DropdownMenu.Root>
             <SubframeCore.DropdownMenu.Trigger asChild={true}>
               <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
@@ -166,13 +273,10 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
                 asChild={true}
               >
                 <DropdownMenu>
-                  <DropdownMenu.DropdownItem icon={<FeatherCopy />} onClick={(e) => { e.stopPropagation(); try { navigator.clipboard.writeText(String(contentText || "")); } catch {} }}>
-                    Copy prompt
+                  <DropdownMenu.DropdownItem icon={<FeatherSparkle />} onClick={handleEdit}>
+                    Edit
                   </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={<FeatherHeart />}>
-                    Add to Favorites
-                  </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={<FeatherTrash />}>
+                  <DropdownMenu.DropdownItem icon={<FeatherTrash />} onClick={handleRemove}>
                     Remove
                   </DropdownMenu.DropdownItem>
                 </DropdownMenu>
