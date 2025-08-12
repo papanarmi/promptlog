@@ -6,6 +6,14 @@ const APP_URL = ((process.env.VITE_WEB_APP_URL as string) || "http://localhost:5
 
 let supabase: SupabaseClient | null = null
 
+function safeTabsSendMessage(tabId: number, message: any): void {
+  try {
+    chrome.tabs.sendMessage(tabId, message, () => {
+      void chrome.runtime.lastError
+    })
+  } catch {}
+}
+
 async function initSupabase() {
   if (supabase) return supabase
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
@@ -95,7 +103,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         // Notify any open web app tabs to clear their session
         chrome.tabs.query({ url: APP_URL + "/*" }, (tabs) => {
           for (const t of tabs) {
-            if (t.id) chrome.tabs.sendMessage(t.id, { type: "pl-webapp-clear" })
+            if (t.id) safeTabsSendMessage(t.id, { type: "pl-webapp-clear" })
           }
         })
       } catch {}
@@ -132,6 +140,30 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       sendResponse({ ok: !error, data: data || [], count: count ?? 0, error: error?.message })
       return
     }
+    if (msg?.type === "templatesChanged") {
+      try {
+        // Notify all ChatGPT tabs to soft refresh templates
+        const urlPatterns = [
+          "https://chat.openai.com/*",
+          "https://chatgpt.com/*",
+        ]
+        chrome.tabs.query({ url: urlPatterns }, (tabs) => {
+          for (const t of tabs) {
+            if (t.id) safeTabsSendMessage(t.id, { type: "templatesChanged" })
+          }
+        })
+        // Also notify the active tab if it matches, as a fallback
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          for (const t of tabs) {
+            if (t.url && (t.url.startsWith("https://chat.openai.com/") || t.url.startsWith("https://chatgpt.com/"))) {
+              if (t.id) safeTabsSendMessage(t.id, { type: "templatesChanged" })
+            }
+          }
+        })
+      } catch {}
+      sendResponse({ ok: true })
+      return
+    }
   })()
   return true
 })
@@ -149,15 +181,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Proactively probe when user activates a tab
 chrome.tabs.onActivated.addListener((activeInfo) => {
-  try {
-    chrome.tabs.sendMessage(activeInfo.tabId, { type: 'pl-webapp-probe' })
-  } catch {}
+  if (typeof activeInfo?.tabId === 'number') {
+    safeTabsSendMessage(activeInfo.tabId, { type: 'pl-webapp-probe' })
+  }
 })
 
 // Also probe when a tab finishes loading
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === 'complete') {
-    try { chrome.tabs.sendMessage(tabId, { type: 'pl-webapp-probe' }) } catch {}
+    if (typeof tabId === 'number') {
+      safeTabsSendMessage(tabId, { type: 'pl-webapp-probe' })
+    }
   }
 })
 

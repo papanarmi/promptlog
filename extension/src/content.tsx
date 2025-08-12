@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 
 const APP_URL = ((process.env.VITE_WEB_APP_URL as string) || "http://localhost:5173").replace(/\/$/, "")
@@ -40,15 +40,31 @@ if (location.origin === APP_URL) {
     if (ev?.data?.type === 'pl-link-session') {
       const { access_token, refresh_token } = ev.data.payload || {}
       if (access_token && refresh_token) {
-        chrome.runtime.sendMessage({ type: 'linkSession', payload: { access_token, refresh_token } })
+        try { chrome.runtime.sendMessage({ type: 'linkSession', payload: { access_token, refresh_token } }) } catch {}
       }
     }
     if (ev?.data?.type === 'pl-clear-session') {
-      chrome.runtime.sendMessage({ type: 'clearSession' })
+      try { chrome.runtime.sendMessage({ type: 'clearSession' }) } catch {}
     }
   })
+  // When templates change in the web app, notify background to broadcast a refresh
+  const notifyTemplatesChanged = () => {
+    try { chrome.runtime.sendMessage({ type: 'templatesChanged' }) } catch {}
+  }
+  window.addEventListener('template-created', notifyTemplatesChanged as EventListener)
+  window.addEventListener('template-updated', notifyTemplatesChanged as EventListener)
+  window.addEventListener('template-removed', notifyTemplatesChanged as EventListener)
   // Prevent mounting UI on the web app
 } else {
+
+function safeSendMessage<T = any>(msg: any): Promise<T | { ok?: boolean; error?: string }> {
+  try {
+    return chrome.runtime.sendMessage(msg) as any
+  } catch (err) {
+    try { console.debug('sendMessage failed', err) } catch {}
+    return Promise.resolve({ ok: false, error: 'extension_context_invalidated' })
+  }
+}
 
 function mountContainer() {
   // Ensure single host
@@ -81,7 +97,11 @@ function mountContainer() {
   `
 
   btn.addEventListener("click", () => {
-    panel.style.display = panel.style.display === "none" ? "block" : "none"
+    const opening = panel.style.display === "none"
+    panel.style.display = opening ? "block" : "none"
+    if (opening) {
+      try { window.dispatchEvent(new CustomEvent('pl-overlay-opened')) } catch {}
+    }
   })
 
   // Mutation observer to re-attach host if DOM clears dynamic nodes
@@ -110,6 +130,7 @@ function FeedPanel() {
   const pageSize = 10
   const end = Math.min(page * pageSize, count)
   const [authenticated, setAuthenticated] = useState<boolean>(false)
+  const lastReqIdRef = useRef(0)
 
   const grouped = useMemo(() => {
     const map = new Map<string, Item[]>()
@@ -123,27 +144,60 @@ function FeedPanel() {
   }, [items])
 
   const load = async (p: number) => {
-    const auth = await chrome.runtime.sendMessage({ type: "sessionStatus" })
-    setAuthenticated(Boolean(auth?.authenticated))
-    if (!auth?.authenticated) {
+    const reqId = ++lastReqIdRef.current
+    const auth = await safeSendMessage<{ authenticated: boolean }>({ type: "sessionStatus" })
+    if (!auth || (auth as any).error) {
+      if (reqId !== lastReqIdRef.current) return
+      setAuthenticated(false)
       setItems([])
       setCount(0)
       return
     }
-    const res = await chrome.runtime.sendMessage({ type: "fetchTemplates", payload: { page: p, pageSize } })
-    if (res?.ok) {
-      setItems(res.data)
-      setCount(res.count)
+    if (reqId !== lastReqIdRef.current) return
+    const isAuthed = Boolean((auth as any)?.authenticated)
+    setAuthenticated(isAuthed)
+    if (!isAuthed) {
+      setItems([])
+      setCount(0)
+      return
+    }
+    const res = await safeSendMessage<{ ok: boolean; data: Item[]; count: number }>({ type: "fetchTemplates", payload: { page: p, pageSize } })
+    if (reqId !== lastReqIdRef.current) return
+    if ((res as any)?.ok) {
+      setItems((res as any).data)
+      setCount((res as any).count)
+    } else {
+      setItems([])
+      setCount(0)
     }
   }
 
   useEffect(() => { load(page) }, [page])
+  // Refresh whenever the overlay is opened
+  useEffect(() => {
+    const onOpened = () => { setPage(1) }
+    window.addEventListener('pl-overlay-opened', onOpened as EventListener)
+    return () => { window.removeEventListener('pl-overlay-opened', onOpened as EventListener) }
+  }, [])
+
+  // Listen for background broadcast to soft-refresh templates
+  useEffect(() => {
+    const listener = (msg: any) => {
+      if (msg?.type === 'templatesChanged') {
+        setPage(1)
+      }
+    }
+    try { chrome.runtime.onMessage.addListener(listener as any) } catch {}
+    return () => {
+      try { chrome.runtime.onMessage.removeListener(listener as any) } catch {}
+    }
+  }, [])
 
   // Listen for web app login events (local dev): when storage changes on sb-* keys, prompt background to refresh
   useEffect(() => {
     const onStorage = (ev: StorageEvent) => {
       if (ev.key && ev.key.startsWith("sb-")) {
-        chrome.runtime.sendMessage({ type: "sessionStatus" }).then(() => load(page))
+        safeSendMessage({ type: "sessionStatus" }).then(() => setPage(1))
       }
     }
     const onMessage = (ev: MessageEvent) => {
@@ -151,11 +205,11 @@ function FeedPanel() {
       if (ev.data.type === 'pl-link-session') {
         const { access_token, refresh_token } = ev.data.payload || {}
         if (access_token && refresh_token) {
-          chrome.runtime.sendMessage({ type: 'linkSession', payload: { access_token, refresh_token } }).then(() => load(page))
+          safeSendMessage({ type: 'linkSession', payload: { access_token, refresh_token } }).then(() => setPage(1))
         }
       }
       if (ev.data.type === 'pl-clear-session') {
-        chrome.runtime.sendMessage({ type: 'clearSession' }).then(() => load(page))
+        safeSendMessage({ type: 'clearSession' }).then(() => setPage(1))
       }
     }
     window.addEventListener("storage", onStorage)
@@ -170,7 +224,22 @@ function FeedPanel() {
     <div style={{ fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system", padding: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <strong>Templates</strong>
-        <small>{authenticated ? (count ? `Showing ${(page - 1) * pageSize + 1}–${end} of ${count}` : "No templates") : "Sign in from the popup"}</small>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            onClick={() => load(1)}
+            title="Refresh"
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 6,
+              padding: "4px 8px",
+              background: "white",
+              cursor: "pointer",
+            }}
+          >
+            Refresh
+          </button>
+          <small>{authenticated ? (count ? `Showing ${(page - 1) * pageSize + 1}–${end} of ${count}` : "No templates") : "Sign in from the popup"}</small>
+        </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {grouped.map((g) => (

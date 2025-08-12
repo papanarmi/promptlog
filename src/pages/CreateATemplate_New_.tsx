@@ -157,6 +157,8 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
         try {
           if (created) {
             window.dispatchEvent(new CustomEvent('template-created', { detail: created }));
+            // Notify extension (if present) to broadcast a refresh
+            try { chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
           }
         } catch {}
       }
@@ -172,6 +174,7 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
       });
       setErrors({});
       onOpenChange(false);
+      try { chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
       alert(editId ? "Template updated successfully!" : "Template saved successfully!");
     } catch (error) {
       console.error("Error saving template:", error);

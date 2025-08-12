@@ -124,6 +124,8 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange, s
             },
           })
         );
+        // Notify extension (if present) to broadcast a refresh
+        try { chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
       } catch {}
     }
   };

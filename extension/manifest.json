@@ -7,7 +7,7 @@
     "default_title": "Promptlog",
     "default_popup": "extension/src/popup/index.html"
   },
-  "permissions": ["storage", "alarms", "clipboardWrite", "activeTab", "scripting"],
+  "permissions": ["storage", "alarms", "clipboardWrite", "activeTab", "scripting", "tabs"],
   "host_permissions": [
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",

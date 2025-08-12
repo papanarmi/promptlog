@@ -1,7 +1,8 @@
 const open = (path: string) => chrome.tabs.create({ url: `${(process.env.VITE_WEB_APP_URL as string) || "http://localhost:5173"}${path}` })
 
 const init = async () => {
-  const profile = await chrome.runtime.sendMessage({ type: "getProfile" })
+  let profile: any
+  try { profile = await chrome.runtime.sendMessage({ type: "getProfile" }) } catch { profile = { authenticated: false } }
   const authed = document.getElementById("authed") as HTMLDivElement
   const anon = document.getElementById("anon") as HTMLDivElement
   if (profile?.authenticated) {
@@ -28,9 +29,9 @@ const init = async () => {
     const onYes = async () => {
       if (dlg.open) dlg.close(); dlg.removeAttribute('open')
       cleanup()
-      await chrome.runtime.sendMessage({ type: "logout" })
-      await chrome.runtime.sendMessage({ type: "clearSession" })
-      await chrome.runtime.sendMessage({ type: "clearWebAppSession" })
+      try { await chrome.runtime.sendMessage({ type: "logout" }) } catch {}
+      try { await chrome.runtime.sendMessage({ type: "clearSession" }) } catch {}
+      try { await chrome.runtime.sendMessage({ type: "clearWebAppSession" }) } catch {}
       authed.style.display = "none"
       anon.style.display = "flex"
     }
