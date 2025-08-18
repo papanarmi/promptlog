@@ -11,19 +11,14 @@ import { Stats } from "@/ui/components/Stats";
 import { CustomComponent } from "@/ui/components/CustomComponent";
 import { FeatherFolder } from "@subframe/core";
 import { FeatherTag } from "@subframe/core";
-import { FeatherCpu } from "@subframe/core";
-import { Tabs } from "@/ui/components/Tabs";
-import { FeatherTableProperties } from "@subframe/core";
-import { FeatherSparkles } from "@subframe/core";
-import { FeatherLayoutGrid } from "@subframe/core";
-import { FeatherTable2 } from "@subframe/core";
-import { PlSearchBar } from "@/ui/components/PlSearchBar";
-import { Badge } from "@/ui/components/Badge";
-import { FeatherPlus } from "@subframe/core";
 import { Feed } from "@/ui/components/Feed";
 import { FeatherChevronLeft } from "@subframe/core";
 import { FeatherChevronRight } from "@subframe/core";
 import { supabase } from "@/lib/supabaseClient";
+import { useCollections } from "@/lib/collectionsContext";
+import { useSearch, Template } from "@/lib/searchContext";
+import { DropdownMenu } from "@/ui/components/DropdownMenu";
+import * as SubframeCore from "@subframe/core";
 
 function PromptLogOverview() {
   const [promptCount, setPromptCount] = useState<number | null>(null);
@@ -31,22 +26,22 @@ function PromptLogOverview() {
   const [templateCount, setTemplateCount] = useState<number | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const isTemplatesTab = location.pathname.startsWith('/templates');
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [total, setTotal] = useState(0);
   const endIndex = Math.min(page * pageSize, Math.max(total, 0));
+  const { collections, collectionsWithCounts, addCollection, renameCollection, removeCollection } = useCollections();
+  const { searchQuery, performFuzzySearch, applySorting, getSortDirection } = useSearch();
 
   useEffect(() => {
     const refreshCounts = async () => {
-      const [allRes, favRes, tmplRes] = await Promise.all([
+      const [allRes, favRes] = await Promise.all([
         supabase.from('prompt_logs').select('*', { count: 'exact', head: true }),
         supabase.from('prompt_logs').select('*', { count: 'exact', head: true }).contains('tags', ['favorite']),
-        supabase.from('prompt_logs').select('*', { count: 'exact', head: true }).eq('kind', 'template'),
       ]);
       if (!('error' in allRes) || !allRes.error) setPromptCount(allRes.count ?? 0);
       if (!('error' in favRes) || !favRes.error) setFavoriteCount(favRes.count ?? 0);
-      if (!('error' in tmplRes) || !tmplRes.error) setTemplateCount(tmplRes.count ?? 0);
+      setTemplateCount(allRes.count ?? 0);
     };
     refreshCounts();
     const onAnyChange = () => { refreshCounts(); };
@@ -62,10 +57,130 @@ function PromptLogOverview() {
     };
   }, []);
 
-  // Reset to first page when switching tabs
-  useEffect(() => {
-    setPage(1);
-  }, [isTemplatesTab]);
+  // Reset to first page on path change
+  useEffect(() => { setPage(1) }, [location.pathname]);
+
+  const handleAddCollection = (name: string) => {
+    addCollection(name);
+  };
+
+  // Download functionality
+  const downloadAsJSON = (data: Template[]) => {
+    const jsonString = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `promptlog-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsCSV = (data: Template[]) => {
+    const headers = ['ID', 'Created At', 'Title', 'Content', 'Collection', 'Tags'];
+    const csvContent = [
+      headers.join(','),
+      ...data.map(item => [
+        `"${item.id}"`,
+        `"${item.created_at}"`,
+        `"${(item.title || '').replace(/"/g, '""')}"`,
+        `"${(item.content || '').replace(/"/g, '""')}"`,
+        `"${(item.collection || '').replace(/"/g, '""')}"`,
+        `"${Array.isArray(item.tags) ? item.tags.join('; ') : ''}"`
+      ].join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `promptlog-export-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAsTXT = (data: Template[]) => {
+    const textContent = data.map(item => {
+      const tags = Array.isArray(item.tags) ? item.tags.join(', ') : '';
+      return [
+        `Title: ${item.title || 'Untitled'}`,
+        `Created: ${new Date(item.created_at).toLocaleString()}`,
+        `Collection: ${item.collection || 'None'}`,
+        `Tags: ${tags}`,
+        `Content:`,
+        item.content || '',
+        '---'
+      ].join('\n');
+    }).join('\n\n');
+    
+    const blob = new Blob([textContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `promptlog-export-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownload = async (format: 'json' | 'csv' | 'txt') => {
+    try {
+      // Fetch the current data using the same logic as the Feed component
+      const ascendingCreated = getSortDirection('created_at') === 'asc';
+      let dataToDownload: Template[] = [];
+
+      if (searchQuery.trim()) {
+        // When searching, fetch all data and apply filters
+        const { data, error } = await supabase
+          .from('prompt_logs')
+          .select('id, created_at, title, content, collection, tags')
+          .order('created_at', { ascending: ascendingCreated })
+          .limit(1000); // Same limit as Feed component
+        
+        if (!error && data) {
+          // Apply fuzzy search and sorting like Feed component does
+          let result = performFuzzySearch(searchQuery, data);
+          result = applySorting(result);
+          dataToDownload = result;
+        }
+      } else {
+        // When not searching, fetch all data (not just current page)
+        const { data, error } = await supabase
+          .from('prompt_logs')
+          .select('id, created_at, title, content, collection, tags')
+          .order('created_at', { ascending: ascendingCreated });
+        
+        if (!error && data) {
+          dataToDownload = applySorting(data);
+        }
+      }
+      
+      if (dataToDownload.length === 0) {
+        alert('No data to download. Please ensure there are prompts in the database.');
+        return;
+      }
+
+      switch (format) {
+        case 'json':
+          downloadAsJSON(dataToDownload);
+          break;
+        case 'csv':
+          downloadAsCSV(dataToDownload);
+          break;
+        case 'txt':
+          downloadAsTXT(dataToDownload);
+          break;
+      }
+    } catch (error) {
+      console.error('Error downloading data:', error);
+      alert('Failed to download data. Please try again.');
+    }
+  };
 
   return (
     <DefaultPageLayout>
@@ -77,21 +192,34 @@ function PromptLogOverview() {
                 Dashboard
               </span>
               <div className="flex items-center gap-2">
-                <IconButton
-                  icon={<FeatherDownload />}
-                  onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                />
-                <Button
-                  disabled={false}
-                  variant="neutral-secondary"
-                  size="medium"
-                  icon={null}
-                  iconRight={null}
-                  loading={false}
-                  onClick={() => navigate('/collections/new')}
-                >
-                  Create a collection
-                </Button>
+                <SubframeCore.DropdownMenu.Root>
+                  <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                    <IconButton
+                      icon={<FeatherDownload />}
+                    />
+                  </SubframeCore.DropdownMenu.Trigger>
+                  <SubframeCore.DropdownMenu.Portal>
+                    <SubframeCore.DropdownMenu.Content
+                      side="bottom"
+                      align="end"
+                      sideOffset={4}
+                      asChild={true}
+                    >
+                      <DropdownMenu>
+                        <DropdownMenu.DropdownItem onClick={() => handleDownload('json')}>
+                          Download as JSON
+                        </DropdownMenu.DropdownItem>
+                        <DropdownMenu.DropdownItem onClick={() => handleDownload('csv')}>
+                          Download as CSV
+                        </DropdownMenu.DropdownItem>
+                        <DropdownMenu.DropdownItem onClick={() => handleDownload('txt')}>
+                          Download as TXT
+                        </DropdownMenu.DropdownItem>
+                      </DropdownMenu>
+                    </SubframeCore.DropdownMenu.Content>
+                  </SubframeCore.DropdownMenu.Portal>
+                </SubframeCore.DropdownMenu.Root>
+
                 <Button icon={<FeatherSparkle />} onClick={() => navigate('/templates/new')}>
                   Create a blank template
                 </Button>
@@ -109,16 +237,11 @@ function PromptLogOverview() {
               <CustomComponent
                 icon={<FeatherFolder />}
                 text="Collections"
-                text2="Outreach Templates Library"
-                text3="15"
-                text4="Design Feedback Scripts"
-                text5="15"
-                text6="Idea Generation"
-                text7="15"
-                text8="Launch-Ready Prompts"
-                text9="15"
-                text10="Core Prompts"
-                text11="15"
+                collections={collections}
+                collectionsWithCounts={collectionsWithCounts}
+                onCollectionAdd={handleAddCollection}
+                onCollectionRename={renameCollection}
+                onCollectionRemove={removeCollection}
                 icon2={<FeatherTag />}
                 text12="Tags"
                 text13="Brainstorming"
@@ -129,76 +252,18 @@ function PromptLogOverview() {
                 text18="15"
                 text19="Research"
                 text20="15"
-                icon3={<FeatherCpu />}
-                text21="Models"
-                text22="GPT 4o"
-                text23="15"
-                text24="GPT o1"
-                text25="15"
+
               />
               <div className="flex grow shrink-0 basis-0 flex-col items-start gap-6 self-stretch">
-                <div className="flex w-full flex-col items-start gap-6">
-                  <div className="flex w-full items-center">
-                    <Tabs>
-                      <Tabs.Item
-                        active={!isTemplatesTab}
-                        icon={<FeatherTableProperties />}
-                        onClick={() => navigate('/')}
-                      >
-                        Overview
-                      </Tabs.Item>
-                      <Tabs.Item
-                        active={isTemplatesTab}
-                        icon={<FeatherSparkles />}
-                        onClick={() => navigate('/templates')}
-                      >
-                        My templates
-                      </Tabs.Item>
-                    </Tabs>
-                    <div className="flex items-center gap-2 self-stretch border-b border-solid border-neutral-border">
-                      <Button
-                        disabled={false}
-                        variant="brand-secondary"
-                        size="medium"
-                        icon={<FeatherLayoutGrid />}
-                        iconRight={null}
-                        loading={false}
-                        onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                      />
-                      <Button
-                        disabled={false}
-                        variant="neutral-tertiary"
-                        size="medium"
-                        icon={<FeatherTable2 />}
-                        iconRight={null}
-                        loading={false}
-                        onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex w-full flex-col items-start gap-4">
-                    <PlSearchBar />
-                    <div className="flex w-full flex-wrap items-center gap-2">
-                      <Badge icon={<FeatherTag />}>Writing</Badge>
-                      <Badge variant="neutral" icon={<FeatherTag />}>Code</Badge>
-                      <Badge variant="neutral" icon={<FeatherTag />}>Analysis</Badge>
-                      <Badge variant="neutral" icon={<FeatherTag />}>Translation</Badge>
-                      <Button
-                        variant="neutral-tertiary"
-                        size="small"
-                        icon={<FeatherPlus />}
-                        onClick={(event: React.MouseEvent<HTMLButtonElement>) => {}}
-                      >
-                        Add tag
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                {isTemplatesTab ? (
-                  <Feed text="Today" text2="Yesterday" kind="template" overview={true} page={page} pageSize={pageSize} onCount={setTotal} />
-                ) : (
-                  <Feed text="Today" text2="Yesterday" kind="log" overview={true} page={page} pageSize={pageSize} onCount={setTotal} />
-                )}
+                <Feed 
+                  text="Today" 
+                  text2="Yesterday" 
+                  kind="template" 
+                  overview={true} 
+                  page={page} 
+                  pageSize={pageSize} 
+                  onCount={setTotal}
+                />
                 <div className="flex w-full items-center justify-center gap-4">
                   <span className="grow shrink-0 basis-0 text-body font-body text-subtext-color">
                     {total > 0

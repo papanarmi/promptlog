@@ -19,6 +19,7 @@ import { FeatherTag } from "@subframe/core";
 import { Button } from "./Button";
 import { FeatherPlus } from "@subframe/core";
 import { TextArea } from "./TextArea";
+import { useCollections } from "@/lib/collectionsContext";
 
 interface TemplateAdditionalDetailsRootProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -55,6 +56,7 @@ const TemplateAdditionalDetailsRoot = React.forwardRef<
   }: TemplateAdditionalDetailsRootProps,
   ref
 ) {
+  const { collections } = useCollections();
   const [tagDraft, setTagDraft] = React.useState("");
 
   const handleAddTag = () => {
@@ -122,11 +124,11 @@ const TemplateAdditionalDetailsRoot = React.forwardRef<
                 className="w-full appearance-none rounded-md border border-neutral-border bg-default-background px-3 pr-10 py-2 text-body font-body focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="">Select or create collection...</option>
-                <option value="Outreach Templates Library">Outreach Templates Library</option>
-                <option value="Design Feedback Scripts">Design Feedback Scripts</option>
-                <option value="Idea Generation">Idea Generation</option>
-                <option value="Launch-Ready Prompts">Launch-Ready Prompts</option>
-                <option value="Core Prompts">Core Prompts</option>
+                {collections.map((collection) => (
+                  <option key={collection} value={collection}>
+                    {collection}
+                  </option>
+                ))}
               </select>
               <FeatherChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-subtext-color" />
             </div>

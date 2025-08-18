@@ -8,7 +8,7 @@
  * Icon Button — https://app.subframe.com/ace97b1b228a/library?component=Icon+Button_af9405b1-8c54-4e01-9786-5aad308224f6
  */
 
-import React from "react";
+import React, { useState } from "react";
 import * as SubframeUtils from "../utils";
 import * as SubframeCore from "@subframe/core";
 import { FeatherCopy } from "@subframe/core";
@@ -24,6 +24,7 @@ import { IconButton } from "./IconButton";
 import { FeatherMoreVertical } from "@subframe/core";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { Dialog } from "./Dialog";
 
 interface PromptCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
   // Small meta text on the right of badges (used for time string)
@@ -41,9 +42,9 @@ interface PromptCardRootProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
   onCreateTemplate?: () => void;
   onCopyTemplate?: () => void;
-  // Data id and kind for actions
+  // Data id
   id?: string;
-  kind?: 'log' | 'template';
+  kind?: 'template';
 }
 
 const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
@@ -67,6 +68,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
     const isClickable = typeof (otherProps as { onClick?: unknown }).onClick === 'function';
     const navigate = useNavigate();
     const [isFavorite, setIsFavorite] = React.useState<boolean>(Array.isArray(tags) && tags.includes('favorite'));
+    const [showRemoveDialog, setShowRemoveDialog] = useState(false);
     React.useEffect(() => {
       setIsFavorite(Array.isArray(tags) && tags.includes('favorite'));
     }, [tags]);
@@ -87,6 +89,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
       e.stopPropagation();
       const id = (otherProps as any).id as string | undefined;
       if (!id) return;
+      const itemKind = 'template';
       const currentTags = Array.isArray(tags) ? tags : [];
       const nextTags = Array.from(new Set([...(currentTags || []), 'favorite']));
       const { error } = await supabase
@@ -96,9 +99,9 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
       if (!error) {
         // inform feed to update this item
         const detail = { id, title: String(titleText || ''), content: String(contentText || ''), collection: category ?? null, tags: nextTags } as any;
-        window.dispatchEvent(new CustomEvent('template-updated', { detail }));
+        window.dispatchEvent(new CustomEvent(`${itemKind}-updated`, { detail }));
         // trigger a soft refresh for stats
-        window.dispatchEvent(new CustomEvent('template-soft-refresh'));
+        window.dispatchEvent(new CustomEvent(`${itemKind}-soft-refresh`));
       }
     };
 
@@ -106,6 +109,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
       e.stopPropagation();
       const id = (otherProps as any).id as string | undefined;
       if (!id) return;
+       const itemKind = 'template';
       const currentTags = Array.isArray(tags) ? tags : [];
       const nextTags = (currentTags || []).filter((t) => t !== 'favorite');
       const { error } = await supabase
@@ -114,25 +118,33 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
         .eq('id', id);
       if (!error) {
         const detail = { id, title: String(titleText || ''), content: String(contentText || ''), collection: category ?? null, tags: nextTags } as any;
-        window.dispatchEvent(new CustomEvent('template-updated', { detail }));
-        window.dispatchEvent(new CustomEvent('template-soft-refresh'));
+        window.dispatchEvent(new CustomEvent(`${itemKind}-updated`, { detail }));
+        window.dispatchEvent(new CustomEvent(`${itemKind}-soft-refresh`));
       }
     };
 
-    const handleRemove = async (e: React.MouseEvent) => {
+    const handleRemoveClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setShowRemoveDialog(true);
+    };
+
+    const handleRemove = async () => {
       const id = (otherProps as any).id as string | undefined;
       if (!id) return;
-      // optional confirm
-      // if (!window.confirm('Remove this item?')) return;
+      setShowRemoveDialog(false);
+      const itemKind = 'template';
       const { error } = await supabase
         .from('prompt_logs')
         .delete()
         .eq('id', id);
       if (!error) {
-        window.dispatchEvent(new CustomEvent('template-removed', { detail: { id } }));
-        window.dispatchEvent(new CustomEvent('template-soft-refresh'));
+        window.dispatchEvent(new CustomEvent(`${itemKind}-removed`, { detail: { id } }));
+        window.dispatchEvent(new CustomEvent(`${itemKind}-soft-refresh`));
       }
+    };
+
+    const handleCancelRemove = () => {
+      setShowRemoveDialog(false);
     };
 
     const toggleFavorite = async (e: React.MouseEvent) => {
@@ -145,8 +157,9 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
       }
     };
     return (
-      <div
-        className={SubframeUtils.twClassNames(
+      <>
+        <div
+          className={SubframeUtils.twClassNames(
           "group/8f873461 flex w-full items-center justify-center gap-2 rounded-lg border border-solid border-neutral-border bg-default-background pl-6 pr-3 py-4 shadow-sm",
           { "items-center justify-center": boolean },
           className,
@@ -167,14 +180,12 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
       >
         <div className="flex grow shrink-0 basis-0 flex-col items-start justify-center gap-4">
           <div className="flex items-center gap-2">
-            {category && String(category).trim().toLowerCase() !== 'none' ? (
-              <Badge
-                className={SubframeUtils.twClassNames({ hidden: false })}
-                variant="variation"
-              >
-                {category}
-              </Badge>
-            ) : null}
+            <Badge
+              className={SubframeUtils.twClassNames({ hidden: false })}
+              variant="variation"
+            >
+              {category && String(category).trim().toLowerCase() !== 'none' ? category : 'none'}
+            </Badge>
             {visibleTags && visibleTags.length > 0 ? (
               <>
                 <div className="flex h-6 w-px flex-none flex-col items-center gap-2 rounded-full bg-neutral-border" />
@@ -234,7 +245,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
               else onCopyTemplate?.();
             }}
           >
-            {boolean ? "Create template" : "Copy prompt"}
+            {boolean ? "Create Template" : "Copy prompt"}
           </Button>
           <IconButton
             icon={
@@ -276,7 +287,7 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
                   <DropdownMenu.DropdownItem icon={<FeatherSparkle />} onClick={handleEdit}>
                     Edit
                   </DropdownMenu.DropdownItem>
-                  <DropdownMenu.DropdownItem icon={<FeatherTrash />} onClick={handleRemove}>
+                  <DropdownMenu.DropdownItem icon={<FeatherTrash />} onClick={handleRemoveClick}>
                     Remove
                   </DropdownMenu.DropdownItem>
                 </DropdownMenu>
@@ -285,6 +296,31 @@ const PromptCardRoot = React.forwardRef<HTMLDivElement, PromptCardRootProps>(
           </SubframeCore.DropdownMenu.Root>
         </div>
       </div>
+
+      {/* Remove Confirmation Dialog */}
+      {showRemoveDialog && (
+        <Dialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+          <Dialog.Content className="p-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-heading-3 font-heading-3 text-default-font">Remove Template</h2>
+                <p className="text-body font-body text-subtext-color">
+                  Are you sure you want to remove this template? This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <Button variant="neutral-secondary" onClick={handleCancelRemove}>
+                  Cancel
+                </Button>
+                <Button variant="destructive-primary" onClick={handleRemove}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog>
+      )}
+      </>
     );
   }
 );

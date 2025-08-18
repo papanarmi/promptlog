@@ -68,14 +68,6 @@ const BadgeRoot = React.forwardRef<HTMLDivElement, BadgeRootProps>(
             )}
           />
         )}
-        {variant === "variation" && (
-          <FeatherPlus
-            className={SubframeUtils.twClassNames(
-              "hidden text-body font-body text-[#d7a604ff]",
-              { "inline-flex": true }
-            )}
-          />
-        )}
         <FeatherPlus className="hidden text-body font-body text-[#8c271eff]" />
         {variant === "variation-2" && (
           <FeatherFolder

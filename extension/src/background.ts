@@ -1,3 +1,6 @@
+`r /* global chrome */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const chrome: any
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 const SUPABASE_URL = (process.env.VITE_SUPABASE_URL as string) || ""
@@ -134,7 +137,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const { data, count, error } = await sb
         .from("prompt_logs")
         .select("id, created_at, title, content, collection, tags", { count: "exact" })
-        .eq("kind", "template")
         .order("created_at", { ascending: false })
         .range(from, to)
       sendResponse({ ok: !error, data: data || [], count: count ?? 0, error: error?.message })
@@ -146,6 +148,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const urlPatterns = [
           "https://chat.openai.com/*",
           "https://chatgpt.com/*",
+          "https://claude.ai/*",
+          "https://gemini.google.com/*",
+          "https://perplexity.ai/*",
+          "https://www.perplexity.ai/*",
         ]
         chrome.tabs.query({ url: urlPatterns }, (tabs) => {
           for (const t of tabs) {
@@ -155,7 +161,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         // Also notify the active tab if it matches, as a fallback
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           for (const t of tabs) {
-            if (t.url && (t.url.startsWith("https://chat.openai.com/") || t.url.startsWith("https://chatgpt.com/"))) {
+            if (t.url && (
+              t.url.startsWith("https://chat.openai.com/") ||
+              t.url.startsWith("https://chatgpt.com/") ||
+              t.url.startsWith("https://claude.ai/") ||
+              t.url.startsWith("https://gemini.google.com/") ||
+              t.url.startsWith("https://perplexity.ai/") ||
+              t.url.startsWith("https://www.perplexity.ai/")
+            )) {
               if (t.id) safeTabsSendMessage(t.id, { type: "templatesChanged" })
             }
           }
@@ -164,11 +177,56 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       sendResponse({ ok: true })
       return
     }
+    if (msg?.type === "addLog") {
+      const { title, content, collection = null, tags = [] } = msg.payload || {}
+      try {
+        const { data: { user } } = await sb.auth.getUser()
+        if (!user) {
+          sendResponse({ ok: false, error: "not_authenticated" })
+          return
+        }
+        const { data, error } = await sb
+          .from("prompt_logs")
+          .insert({
+            user_id: user.id,
+            title: title || (content ? String(content).slice(0, 80) : "Untitled"),
+            content: content || "",
+            collection: collection,
+            tags: Array.isArray(tags) ? tags : [],
+          })
+          .select('id, created_at, title, content, collection, tags')
+          .single()
+        if (error) {
+          sendResponse({ ok: false, error: error.message })
+          return
+        }
+        // Notify any open web app tabs so the dashboard feed updates immediately
+        try {
+          // Prefer sending to any open web app tabs so the UI updates
+          chrome.tabs.query({ url: APP_URL + "/*" }, (tabs) => {
+            let sent = false
+            for (const t of tabs) {
+              if (t.id) { safeTabsSendMessage(t.id, { type: 'templateCreated', payload: data }); sent = true }
+            }
+            // If no web app tabs are open, broadcast to the active tab to allow a bridge page to pick it up
+            if (!sent) {
+              chrome.tabs.query({ active: true, currentWindow: true }, (at) => {
+                for (const t of at) { if (t.id) safeTabsSendMessage(t.id, { type: 'templateCreated', payload: data }) }
+              })
+            }
+          })
+        } catch {}
+        sendResponse({ ok: true, data })
+      } catch (e: any) {
+        sendResponse({ ok: false, error: String(e?.message || e) })
+      }
+      return
+    }
   })()
   return true
 })
 
-// Expose a quick session probe
+  // Expose a quick session probe
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   ;(async () => {
     if (msg?.type !== "sessionStatus") return

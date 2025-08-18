@@ -10,7 +10,6 @@ interface FormData {
   description: string;
   prompt: string;
   collection: string;
-  type: string;
   tags: string[];
 }
 
@@ -28,7 +27,6 @@ export default function TemplateDetails() {
     description: "",
     prompt: "",
     collection: "",
-    type: "",
     tags: [],
   });
   const [errors, setErrors] = useState<FormErrors>({});
@@ -42,7 +40,6 @@ export default function TemplateDetails() {
         .from("prompt_logs")
         .select("id, title, description, content, collection, tags")
         .eq("id", id)
-        .eq("kind", "template")
         .maybeSingle();
       if (!error && data) {
         setFormData({
@@ -50,7 +47,6 @@ export default function TemplateDetails() {
           description: (data as any).description || "",
           prompt: (data.content as string) || "",
           collection: (data as any).collection || "",
-          type: "",
           tags: (data.tags as string[]) || [],
         });
       }
@@ -88,8 +84,7 @@ export default function TemplateDetails() {
           collection: formData.collection,
           tags: formData.tags,
         })
-        .eq("id", id)
-        .eq("kind", "template");
+        .eq("id", id);
       if (error) throw error;
       alert("Template updated successfully!");
     } catch (e) {
@@ -211,19 +206,7 @@ export default function TemplateDetails() {
                   />
                 </div>
 
-                {/* Type */}
-                <div className="flex w-full flex-col items-start gap-2">
-                  <div className="flex w-full items-center gap-2">
-                    <span className="text-body-bold font-body-bold text-default-font">Type</span>
-                    <span className="text-caption font-caption text-subtext-color">(optional)</span>
-                  </div>
-                  <input
-                    value={formData.type}
-                    onChange={(e) => handleInputChange("type", e.target.value)}
-                    placeholder="Select type..."
-                    className="w-full rounded-md border px-3 py-2 text-body font-body border-neutral-border focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
+
 
                 {/* Tags */}
                 <div className="flex w-full flex-col items-start gap-2">

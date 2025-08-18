@@ -10,6 +10,8 @@ import Logout from "@/pages/Logout";
 import RequireAuth from "@/lib/RequireAuth";
 import { supabase } from "@/lib/supabaseClient";
 import TemplateDetails from "@/pages/TemplateDetails";
+import { SearchProvider } from "@/lib/searchContext";
+import { CollectionsProvider } from "@/lib/collectionsContext";
 
 function RedirectIfAuthed({ children }: { children: React.ReactElement }) {
   const [checked, setChecked] = React.useState(false);
@@ -58,8 +60,10 @@ try {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
+    <CollectionsProvider>
+      <SearchProvider>
+        <BrowserRouter>
+        <Routes>
         <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
         <Route path="/signup" element={<RedirectIfAuthed><Signup /></RedirectIfAuthed>} />
         <Route path="/update-password" element={<UpdatePassword />} />
@@ -130,7 +134,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+        </BrowserRouter>
+      </SearchProvider>
+    </CollectionsProvider>
   </React.StrictMode>
 );

@@ -6,15 +6,19 @@
  * Topbar with center nav — https://app.subframe.com/ace97b1b228a/library?component=Topbar+with+center+nav_2d99c811-1412-432c-b923-b290dd513802
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import * as SubframeUtils from "../utils";
+import * as SubframeCore from "@subframe/core";
 import { IconButton } from "../components/IconButton";
-import { FeatherSettings } from "@subframe/core";
 import { FeatherUser } from "@subframe/core";
 import { TopbarWithCenterNav } from "../components/TopbarWithCenterNav";
 import { supabase } from "@/lib/supabaseClient";
 import { Link, useNavigate } from "react-router-dom";
 import { FeatherLogOut } from "@subframe/core";
+import { PlSearchBar } from "../components/PlSearchBar";
+import { DropdownMenu } from "../components/DropdownMenu";
+import { Dialog } from "../components/Dialog";
+import { Button } from "../components/Button";
 
 interface DefaultPageLayoutRootProps
   extends React.HTMLAttributes<HTMLDivElement> {
@@ -30,7 +34,42 @@ const DefaultPageLayoutRoot = React.forwardRef<
   ref
 ) {
   const navigate = useNavigate();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+
+  useEffect(() => {
+    // Get user email on component mount
+    const getUserEmail = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          setUserEmail(user.email);
+        }
+      } catch (error) {
+        console.error('Error getting user:', error);
+      }
+    };
+
+    getUserEmail();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user?.email) {
+        setUserEmail(session.user.email);
+      } else {
+        setUserEmail(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogoutClick = () => {
+    setShowLogoutDialog(true);
+  };
+
   const handleLogout = async () => {
+    setShowLogoutDialog(false);
     try {
       await supabase.auth.signOut();
     } catch {}
@@ -42,6 +81,10 @@ const DefaultPageLayoutRoot = React.forwardRef<
     } catch {}
     // Redirect to dedicated logout route to ensure auth guard updates
     navigate("/logout", { replace: true });
+  };
+
+  const handleCancelLogout = () => {
+    setShowLogoutDialog(false);
   };
 
   return (
@@ -62,11 +105,33 @@ const DefaultPageLayoutRoot = React.forwardRef<
             />
           </Link>
         }
+        centerSlot={
+          <div className="w-full max-w-md">
+            <PlSearchBar className="w-full" compact />
+          </div>
+        }
         rightSlot={
           <>
-            <IconButton size="large" icon={<FeatherSettings />} />
-            <IconButton size="large" icon={<FeatherLogOut />} onClick={handleLogout} />
-            <IconButton size="large" icon={<FeatherUser />} />
+            <IconButton size="large" icon={<FeatherLogOut />} onClick={handleLogoutClick} />
+            <SubframeCore.DropdownMenu.Root>
+              <SubframeCore.DropdownMenu.Trigger asChild={true}>
+                <IconButton size="large" icon={<FeatherUser />} />
+              </SubframeCore.DropdownMenu.Trigger>
+              <SubframeCore.DropdownMenu.Portal>
+                <SubframeCore.DropdownMenu.Content
+                  side="bottom"
+                  align="end"
+                  sideOffset={4}
+                  asChild={true}
+                >
+                  <DropdownMenu>
+                    <DropdownMenu.DropdownItem icon={<FeatherUser />}>
+                      {userEmail || 'Loading...'}
+                    </DropdownMenu.DropdownItem>
+                  </DropdownMenu>
+                </SubframeCore.DropdownMenu.Content>
+              </SubframeCore.DropdownMenu.Portal>
+            </SubframeCore.DropdownMenu.Root>
           </>
         }
       />
@@ -75,6 +140,30 @@ const DefaultPageLayoutRoot = React.forwardRef<
           {children}
         </div>
       ) : null}
+
+      {/* Logout Confirmation Dialog */}
+      {showLogoutDialog && (
+        <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+          <Dialog.Content className="p-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-heading-3 font-heading-3 text-default-font">Confirm Logout</h2>
+                <p className="text-body font-body text-subtext-color">
+                  Are you sure you want to log out? You will need to sign in again to access your account.
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <Button variant="neutral-secondary" onClick={handleCancelLogout}>
+                  Cancel
+                </Button>
+                <Button variant="destructive-primary" onClick={handleLogout}>
+                  Log Out
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog>
+      )}
     </div>
   );
 });

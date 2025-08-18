@@ -8,6 +8,7 @@ import { FeatherLightbulb } from "@subframe/core";
 import { TemplateAdditionalDetails } from "@/ui/components/TemplateAdditionalDetails";
 import { Button } from "@/ui/components/Button";
 import { supabase } from "@/lib/supabaseClient";
+import { useCollections } from "@/lib/collectionsContext";
 import { useSearchParams } from "react-router-dom";
 
 interface CreateATemplate_New_Props {
@@ -20,7 +21,6 @@ interface FormData {
   description: string;
   prompt: string;
   collection: string;
-  type: string;
   tags: string[];
 }
 
@@ -31,12 +31,12 @@ interface FormErrors {
 }
 
 function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props) {
+  const { collections } = useCollections();
   const [formData, setFormData] = useState<FormData>({
     title: "",
     description: "",
     prompt: "",
     collection: "",
-    type: "",
     tags: []
   });
 
@@ -134,8 +134,7 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
             collection: formData.collection,
             tags: formData.tags,
           })
-          .eq('id', editId)
-          .eq('kind','template');
+          .eq('id', editId);
         if (error) throw error;
       } else {
         const { data: created, error } = await supabase
@@ -147,8 +146,6 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
             content: formData.prompt,
             collection: formData.collection,
             tags: formData.tags,
-            kind: 'template',
-            source: 'web',
             from_log_id: fromId
           })
           .select('id, created_at, title, content, collection, tags')
@@ -158,7 +155,7 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
           if (created) {
             window.dispatchEvent(new CustomEvent('template-created', { detail: created }));
             // Notify extension (if present) to broadcast a refresh
-            try { chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
+            try { (window as any)?.chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
           }
         } catch {}
       }
@@ -169,12 +166,11 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
         description: "",
         prompt: "",
         collection: "",
-        type: "",
         tags: []
       });
       setErrors({});
       onOpenChange(false);
-      try { chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
+      try { (window as any)?.chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
       alert(editId ? "Template updated successfully!" : "Template saved successfully!");
     } catch (error) {
       console.error("Error saving template:", error);
@@ -191,7 +187,6 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
       description: "",
       prompt: "",
       collection: "",
-      type: "",
       tags: []
     });
     setErrors({});
@@ -356,11 +351,11 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
                   } focus:outline-none focus:ring-1 focus:ring-brand-500`}
                 >
                   <option value="">Select or create collection...</option>
-                  <option value="Outreach Templates Library">Outreach Templates Library</option>
-                  <option value="Design Feedback Scripts">Design Feedback Scripts</option>
-                  <option value="Idea Generation">Idea Generation</option>
-                  <option value="Launch-Ready Prompts">Launch-Ready Prompts</option>
-                  <option value="Core Prompts">Core Prompts</option>
+                  {collections.map((collection) => (
+                    <option key={collection} value={collection}>
+                      {collection}
+                    </option>
+                  ))}
                 </select>
                 {errors.collection && (
                   <span className="text-caption font-caption text-error-600">
@@ -369,29 +364,7 @@ function CreateATemplate_New_({ open, onOpenChange }: CreateATemplate_New_Props)
                 )}
               </div>
 
-              {/* Type Field */}
-              <div className="flex w-full flex-col items-start gap-2">
-                <div className="flex w-full items-center gap-2">
-                  <span className="text-body-bold font-body-bold text-default-font">
-                    Type
-                  </span>
-                  <span className="text-caption font-caption text-subtext-color">
-                    (optional)
-                  </span>
-                </div>
-                <select
-                  value={formData.type}
-                  onChange={(e) => handleInputChange("type", e.target.value)}
-                  className="w-full rounded-md border border-neutral-border px-3 py-2 text-body font-body focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                >
-                  <option value="">Select type...</option>
-                  <option value="Instruction">Instruction</option>
-                  <option value="Generation">Generation</option>
-                  <option value="Summarization">Summarization</option>
-                  <option value="Analysis">Analysis</option>
-                  <option value="Translation">Translation</option>
-                </select>
-              </div>
+
 
               {/* Tags Field */}
               <div className="flex w-full flex-col items-start gap-2">

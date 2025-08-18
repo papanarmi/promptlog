@@ -56,7 +56,6 @@ export function InactivityLogout(): React.ReactElement | null {
       'wheel',
       'pointerdown',
       'pointermove',
-      'visibilitychange',
     ];
 
     const onActivity = () => {
@@ -65,6 +64,9 @@ export function InactivityLogout(): React.ReactElement | null {
     };
 
     activityEvents.forEach((evt) => window.addEventListener(evt, onActivity, { passive: true }));
+    // visibilitychange is a document event
+    const onVisibility = () => { if (document.visibilityState !== 'hidden') recordActivity() }
+    document.addEventListener('visibilitychange', onVisibility)
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === ACTIVITY_STORAGE_KEY) {
@@ -76,6 +78,7 @@ export function InactivityLogout(): React.ReactElement | null {
     return () => {
       clearExistingTimer();
       activityEvents.forEach((evt) => window.removeEventListener(evt, onActivity));
+      document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('storage', onStorage);
     };
   }, [recordActivity, scheduleTimer, clearExistingTimer]);

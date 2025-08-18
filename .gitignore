@@ -31,6 +31,7 @@ mcp.json
 # Local docs (do not commit)
 docs/app-routing-and-next-steps.md
 docs/security-hardening.md
+todo.md
 
 # Local environment files (do not commit secrets)
 .env

@@ -7,13 +7,15 @@
     "default_title": "Promptlog",
     "default_popup": "extension/src/popup/index.html"
   },
-  "permissions": ["storage", "alarms", "clipboardWrite", "activeTab", "scripting"],
+  "permissions": ["storage", "alarms", "clipboardWrite", "activeTab", "scripting", "tabs"],
   "host_permissions": [
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
-    "http://localhost:5173/*",
-    "http://localhost:5174/*",
-    "*://localhost/*"
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://perplexity.ai/*",
+    "https://www.perplexity.ai/*",
+    "http://localhost:5173/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -24,9 +26,11 @@
       "matches": [
         "https://chat.openai.com/*",
         "https://chatgpt.com/*",
-        "http://localhost:5173/*",
-        "http://localhost:5174/*",
-        "*://localhost/*"
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://perplexity.ai/*",
+        "https://www.perplexity.ai/*",
+        "http://localhost:5173/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

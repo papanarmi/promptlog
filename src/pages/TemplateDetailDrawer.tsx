@@ -39,7 +39,6 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange, s
         .from("prompt_logs")
         .select("id, title, description, content, collection, tags, created_at")
         .eq("id", templateId)
-        .eq("kind", "template")
         .maybeSingle();
       if (!error) {
         const r = data as any as TemplateRow;
@@ -106,8 +105,7 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange, s
         collection: form.collection,
         tags: form.tags,
       })
-      .eq('id', row.id)
-      .eq('kind','template');
+      .eq('id', row.id);
     setLoading(false);
     if (!error) {
       setRow({ ...row, ...form });
@@ -125,7 +123,7 @@ export default function TemplateDetailDrawer({ open, templateId, onOpenChange, s
           })
         );
         // Notify extension (if present) to broadcast a refresh
-        try { chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
+        try { (window as any)?.chrome?.runtime?.sendMessage?.({ type: 'templatesChanged' }) } catch {}
       } catch {}
     }
   };

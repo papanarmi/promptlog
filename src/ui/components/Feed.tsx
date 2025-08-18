@@ -10,12 +10,13 @@ import * as SubframeUtils from "../utils";
 import { PromptCard } from "./PromptCard";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { useSearch, Template } from "@/lib/searchContext";
 
 interface FeedRootProps extends React.HTMLAttributes<HTMLDivElement> {
   text?: React.ReactNode;
   text2?: React.ReactNode;
   overview?: boolean;
-  kind?: 'log' | 'template';
+  kind?: 'template';
   className?: string;
   page?: number;
   pageSize?: number;
@@ -24,55 +25,75 @@ interface FeedRootProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
   function FeedRoot(
-    { text, text2, overview = false, kind = 'log', className, page = 1, pageSize = 10, onCount, ...otherProps }: FeedRootProps,
+    { text, text2, overview = false, kind = 'template', className, page = 1, pageSize = 10, onCount, ...otherProps }: FeedRootProps,
     ref
   ) {
   const navigate = useNavigate();
-  const [items, setItems] = useState<Array<{ id: string; created_at: string; title: string; content: string; collection: string | null; tags: string[] }>>([]);
+  const { searchQuery, performFuzzySearch, applySorting, sortStateMap, getSortDirection } = useSearch();
+  const [allItems, setAllItems] = useState<Template[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
 
+  // Fetch all data for search functionality
   useEffect(() => {
     (async () => {
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      const { data, count, error } = await supabase
-        .from('prompt_logs')
-        .select('id, created_at, title, content, collection, tags', { count: 'exact' })
-        .eq('kind', kind)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-      if (!error) {
-        setItems(data || []);
-        if (typeof count === 'number') {
-          setTotalCount(count);
-          onCount?.(count);
+      const ascendingCreated = getSortDirection('created_at') === 'asc';
+      if (searchQuery.trim()) {
+        // When searching, fetch all data (up to a reasonable limit)
+        const { data, count, error } = await supabase
+          .from('prompt_logs')
+          .select('id, created_at, title, content, collection, tags', { count: 'exact' })
+          .order('created_at', { ascending: ascendingCreated })
+          .limit(1000); // Reasonable limit for client-side search
+        if (!error) {
+          setAllItems(data || []);
+          if (typeof count === 'number') {
+            setTotalCount(count);
+          }
+        }
+      } else {
+        // When not searching, use pagination
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        const { data, count, error } = await supabase
+          .from('prompt_logs')
+          .select('id, created_at, title, content, collection, tags', { count: 'exact' })
+          .order('created_at', { ascending: ascendingCreated })
+          .range(from, to);
+        if (!error) {
+          setAllItems(data || []);
+          if (typeof count === 'number') {
+            setTotalCount(count);
+            onCount?.(count);
+          }
         }
       }
     })();
     const onUpdated = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id: string; title: string; content: string; collection: string | null; tags: string[] };
       if (!detail) return;
-      setItems((prev) => prev.map((it) => (it.id === detail.id ? { ...it, ...detail } : it)));
+      setAllItems((prev) => prev.map((it) => (it.id === detail.id ? { ...it, ...detail } : it)));
     };
-    window.addEventListener('template-updated', onUpdated as EventListener);
+    const onTemplateUpdated = (ev: Event) => { onUpdated(ev) };
+    window.addEventListener('template-updated', onTemplateUpdated as EventListener);
     const onRemoved = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id: string };
       if (!detail) return;
-      setItems((prev) => prev.filter((it) => it.id !== detail.id));
+      setAllItems((prev) => prev.filter((it) => it.id !== detail.id));
       setTotalCount((t) => {
         const v = Math.max(0, t - 1);
         onCount?.(v);
         return v;
       });
     };
-    window.addEventListener('template-removed', onRemoved as EventListener);
+    const onTemplateRemoved = (ev: Event) => { onRemoved(ev) };
+    window.addEventListener('template-removed', onTemplateRemoved as EventListener);
     const onCreated = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id: string; created_at: string; title: string; content: string; collection: string | null; tags: string[] };
       if (!detail) return;
-      setItems((prev) => {
+      setAllItems((prev) => {
         // avoid duplicates
         if (prev.find((p) => p.id === detail.id)) return prev;
-        return [detail, ...prev].slice(0, pageSize);
+        return [detail, ...prev];
       });
       setTotalCount((t) => {
         const v = t + 1;
@@ -80,13 +101,34 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
         return v;
       });
     };
-    window.addEventListener('template-created', onCreated as EventListener);
+    const onTemplateCreated = (ev: Event) => { onCreated(ev) };
+    window.addEventListener('template-created', onTemplateCreated as EventListener);
     return () => {
-      window.removeEventListener('template-updated', onUpdated as EventListener);
-      window.removeEventListener('template-created', onCreated as EventListener);
-      window.removeEventListener('template-removed', onRemoved as EventListener);
+      window.removeEventListener('template-updated', onTemplateUpdated as EventListener);
+      window.removeEventListener('template-created', onTemplateCreated as EventListener);
+      window.removeEventListener('template-removed', onTemplateRemoved as EventListener);
     };
-  }, [kind, page, pageSize]);
+  }, [page, pageSize, searchQuery, sortStateMap, getSortDirection]);
+
+  // Apply fuzzy search and pagination
+  const items = useMemo(() => {
+    let result = allItems;
+    if (searchQuery.trim()) {
+      // Apply fuzzy search
+      result = performFuzzySearch(searchQuery, result);
+      const filteredCount = result.length;
+      onCount?.(filteredCount);
+    }
+    // Apply sorting
+    result = applySorting(result);
+    // Apply pagination when searching
+    if (searchQuery.trim()) {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize;
+      return result.slice(from, to);
+    }
+    return result;
+  }, [searchQuery, allItems, page, pageSize, performFuzzySearch, onCount, applySorting]);
 
   const grouped = useMemo(() => {
     const startOfDayKey = (d: Date) => {
@@ -127,9 +169,19 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
       const day = date.getDate();
       return `${day}${suffix(day)} ${monthShort[date.getMonth()]}`;
     };
-    const keys = Array.from(map.keys()).sort((a, b) => toDate(b).getTime() - toDate(a).getTime());
-    return keys.map((key) => ({ label: labelFor(toDate(key)), items: map.get(key)! }));
-  }, [items]);
+    const dateAsc = getSortDirection('created_at') === 'asc';
+    const keys = Array.from(map.keys()).sort((a, b) =>
+      dateAsc ? toDate(a).getTime() - toDate(b).getTime() : toDate(b).getTime() - toDate(a).getTime()
+    );
+    return keys.map((key) => {
+      const groupItems = [...(map.get(key) || [])].sort((a, b) => {
+        const tA = new Date(a.created_at).getTime();
+        const tB = new Date(b.created_at).getTime();
+        return dateAsc ? tA - tB : tB - tA;
+      });
+      return { label: labelFor(toDate(key)), items: groupItems };
+    });
+  }, [items, sortStateMap, getSortDirection]);
 
   const formatRelative = (iso: string) => {
     const now = Date.now();
@@ -194,12 +246,12 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
                 text={formatRelative(it.created_at)}
                 titleText={it.title}
                 contentText={it.content}
-                boolean={kind !== 'template' && overview ? true : false}
+                boolean={false}
                 category={cleanCollection(it.collection)}
                 tags={normalizeTags(it.tags)}
                 hoverActions={true}
                 id={it.id}
-                kind={kind}
+                 kind={'template'}
                 onClick={() => navigate(`/templates/${it.id}`)}
                 onCreateTemplate={() => overview && navigate(`/templates/new?from=${it.id}`)}
                 onCopyTemplate={() => {
