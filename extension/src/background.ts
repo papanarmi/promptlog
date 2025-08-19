@@ -251,6 +251,4 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       safeTabsSendMessage(tabId, { type: 'pl-webapp-probe' })
     }
   }
-})
-
-
+});

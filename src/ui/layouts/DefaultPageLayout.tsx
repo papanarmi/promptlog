@@ -136,7 +136,7 @@ const DefaultPageLayoutRoot = React.forwardRef<
         }
       />
       {children ? (
-        <div className="flex w-full grow shrink-0 basis-0 flex-col items-start gap-4 overflow-y-auto bg-default-background">
+        <div className="flex w-full grow shrink-0 basis-0 flex-col items-start gap-4 overflow-y-auto bg-default-background" style={{scrollbarGutter: 'stable'}}>
           {children}
         </div>
       ) : null}

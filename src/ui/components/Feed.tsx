@@ -21,11 +21,13 @@ interface FeedRootProps extends React.HTMLAttributes<HTMLDivElement> {
   page?: number;
   pageSize?: number;
   onCount?: (n: number) => void;
+  favoritesOnly?: boolean;
+  selectedCollections?: string[];
 }
 
 const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
   function FeedRoot(
-    { text, text2, overview = false, kind = 'template', className, page = 1, pageSize = 10, onCount, ...otherProps }: FeedRootProps,
+    { text, text2, overview = false, kind = 'template', className, page = 1, pageSize = 10, onCount, favoritesOnly = false, selectedCollections = [], ...otherProps }: FeedRootProps,
     ref
   ) {
   const navigate = useNavigate();
@@ -37,13 +39,24 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
   useEffect(() => {
     (async () => {
       const ascendingCreated = getSortDirection('created_at') === 'asc';
+      let query = supabase
+        .from('prompt_logs')
+        .select('id, created_at, title, content, collection, tags', { count: 'exact' })
+        .order('created_at', { ascending: ascendingCreated });
+
+      // Add favorites filter if needed
+      if (favoritesOnly) {
+        query = query.contains('tags', ['favorite']);
+      }
+
+      // Add collection filter if needed
+      if (selectedCollections.length > 0) {
+        query = query.in('collection', selectedCollections);
+      }
+
       if (searchQuery.trim()) {
         // When searching, fetch all data (up to a reasonable limit)
-        const { data, count, error } = await supabase
-          .from('prompt_logs')
-          .select('id, created_at, title, content, collection, tags', { count: 'exact' })
-          .order('created_at', { ascending: ascendingCreated })
-          .limit(1000); // Reasonable limit for client-side search
+        const { data, count, error } = await query.limit(1000); // Reasonable limit for client-side search
         if (!error) {
           setAllItems(data || []);
           if (typeof count === 'number') {
@@ -54,11 +67,7 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
         // When not searching, use pagination
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
-        const { data, count, error } = await supabase
-          .from('prompt_logs')
-          .select('id, created_at, title, content, collection, tags', { count: 'exact' })
-          .order('created_at', { ascending: ascendingCreated })
-          .range(from, to);
+        const { data, count, error } = await query.range(from, to);
         if (!error) {
           setAllItems(data || []);
           if (typeof count === 'number') {
@@ -108,7 +117,7 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
       window.removeEventListener('template-created', onTemplateCreated as EventListener);
       window.removeEventListener('template-removed', onTemplateRemoved as EventListener);
     };
-  }, [page, pageSize, searchQuery, sortStateMap, getSortDirection]);
+  }, [page, pageSize, searchQuery, sortStateMap, getSortDirection, favoritesOnly, selectedCollections]);
 
   // Apply fuzzy search and pagination
   const items = useMemo(() => {

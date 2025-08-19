@@ -57,6 +57,8 @@ interface CustomComponentRootProps
   onCollectionAdd?: (name: string) => void;
   onCollectionRename?: (oldName: string, newName: string) => void;
   onCollectionRemove?: (name: string) => void;
+  onCollectionClick?: (name: string) => void;
+  selectedCollections?: string[];
 }
 
 const CustomComponentRoot = React.forwardRef<
@@ -94,6 +96,8 @@ const CustomComponentRoot = React.forwardRef<
     onCollectionAdd,
     onCollectionRename,
     onCollectionRemove,
+    onCollectionClick,
+    selectedCollections = [],
     ...otherProps
   }: CustomComponentRootProps,
   ref
@@ -224,9 +228,16 @@ const CustomComponentRoot = React.forwardRef<
                     autoFocus
                   />
                 ) : (
-                  <span className="line-clamp-1 grow shrink-0 basis-0 text-body-bold font-body-bold text-default-font">
+                  <button 
+                    onClick={() => onCollectionClick?.(collection.name)}
+                    className={`line-clamp-1 grow shrink-0 basis-0 text-body-bold font-body-bold text-left p-2 rounded-md transition-colors ${
+                      selectedCollections.includes(collection.name) 
+                        ? 'bg-brand-50 text-brand-700 border border-brand-200' 
+                        : 'text-default-font hover:bg-neutral-50 hover:text-brand-600'
+                    }`}
+                  >
                     {collection.name}
-                  </span>
+                  </button>
                 )}
                 <div className="flex items-center gap-2">
                   {renamingCollection === collection.name ? (

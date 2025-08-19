@@ -18,6 +18,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { useCollections } from "@/lib/collectionsContext";
 import { useSearch, Template } from "@/lib/searchContext";
 import { DropdownMenu } from "@/ui/components/DropdownMenu";
+import { Tabs } from "@/ui/components/Tabs";
+import { Badge } from "@/ui/components/Badge";
 import * as SubframeCore from "@subframe/core";
 
 function PromptLogOverview() {
@@ -29,6 +31,8 @@ function PromptLogOverview() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [total, setTotal] = useState(0);
+  const [activeTab, setActiveTab] = useState<'logs' | 'favorites'>('logs');
+  const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
   const endIndex = Math.min(page * pageSize, Math.max(total, 0));
   const { collections, collectionsWithCounts, addCollection, renameCollection, removeCollection } = useCollections();
   const { searchQuery, performFuzzySearch, applySorting, getSortDirection } = useSearch();
@@ -57,11 +61,31 @@ function PromptLogOverview() {
     };
   }, []);
 
-  // Reset to first page on path change
-  useEffect(() => { setPage(1) }, [location.pathname]);
+  // Reset to first page on path change, tab change, or collection filter change
+  useEffect(() => { setPage(1) }, [location.pathname, activeTab, selectedCollections]);
 
   const handleAddCollection = (name: string) => {
     addCollection(name);
+  };
+
+  const handleCollectionClick = (collectionName: string) => {
+    setSelectedCollections(prev => {
+      if (prev.includes(collectionName)) {
+        // Remove if already selected
+        return prev.filter(name => name !== collectionName);
+      } else {
+        // Add if not selected
+        return [...prev, collectionName];
+      }
+    });
+  };
+
+  const handleRemoveCollection = (collectionName: string) => {
+    setSelectedCollections(prev => prev.filter(name => name !== collectionName));
+  };
+
+  const handleClearFilters = () => {
+    setSelectedCollections([]);
   };
 
   // Download functionality
@@ -134,13 +158,23 @@ function PromptLogOverview() {
       const ascendingCreated = getSortDirection('created_at') === 'asc';
       let dataToDownload: Template[] = [];
 
+      // Build base query with favorites filter if needed
+      let query = supabase
+        .from('prompt_logs')
+        .select('id, created_at, title, content, collection, tags')
+        .order('created_at', { ascending: ascendingCreated });
+
+      if (activeTab === 'favorites') {
+        query = query.contains('tags', ['favorite']);
+      }
+
+      if (selectedCollections.length > 0) {
+        query = query.in('collection', selectedCollections);
+      }
+
       if (searchQuery.trim()) {
         // When searching, fetch all data and apply filters
-        const { data, error } = await supabase
-          .from('prompt_logs')
-          .select('id, created_at, title, content, collection, tags')
-          .order('created_at', { ascending: ascendingCreated })
-          .limit(1000); // Same limit as Feed component
+        const { data, error } = await query.limit(1000); // Same limit as Feed component
         
         if (!error && data) {
           // Apply fuzzy search and sorting like Feed component does
@@ -150,10 +184,7 @@ function PromptLogOverview() {
         }
       } else {
         // When not searching, fetch all data (not just current page)
-        const { data, error } = await supabase
-          .from('prompt_logs')
-          .select('id, created_at, title, content, collection, tags')
-          .order('created_at', { ascending: ascendingCreated });
+        const { data, error } = await query;
         
         if (!error && data) {
           dataToDownload = applySorting(data);
@@ -185,7 +216,7 @@ function PromptLogOverview() {
   return (
     <DefaultPageLayout>
       <div className="container max-w-none flex h-full w-full flex-col items-start">
-        <div className="flex w-full grow shrink-0 basis-0 flex-col items-center gap-4 bg-default-background px-12 py-16 overflow-auto">
+        <div className="flex w-full grow shrink-0 basis-0 flex-col items-center gap-4 bg-default-background px-12 py-16 overflow-y-auto" style={{scrollbarGutter: 'stable'}}>
           <div className="flex w-full max-w-[1280px] grow shrink-0 basis-0 flex-col items-start gap-8">
             <div className="flex w-full items-center justify-between">
               <span className="text-heading-1 font-heading-1 text-default-font">
@@ -225,14 +256,14 @@ function PromptLogOverview() {
                 </Button>
               </div>
             </div>
-            <Stats
+{/* <Stats
               text="Total prompts"
               text2={promptCount === null ? "…" : String(promptCount)}
               text3="Favorite prompts"
               text4={favoriteCount === null ? "…" : String(favoriteCount)}
               text5="Templates"
               text6={templateCount === null ? "…" : String(templateCount)}
-            />
+            /> */}
             <div className="flex w-full grow shrink-0 basis-0 items-start gap-8">
               <CustomComponent
                 icon={<FeatherFolder />}
@@ -242,6 +273,8 @@ function PromptLogOverview() {
                 onCollectionAdd={handleAddCollection}
                 onCollectionRename={renameCollection}
                 onCollectionRemove={removeCollection}
+                onCollectionClick={handleCollectionClick}
+                selectedCollections={selectedCollections}
                 icon2={<FeatherTag />}
                 text12="Tags"
                 text13="Brainstorming"
@@ -255,6 +288,50 @@ function PromptLogOverview() {
 
               />
               <div className="flex grow shrink-0 basis-0 flex-col items-start gap-6 self-stretch">
+                {/* Tabs and Filters Container */}
+                <div className="flex flex-col w-full">
+                  <Tabs>
+                    <Tabs.Item 
+                      active={activeTab === 'logs'} 
+                      onClick={() => setActiveTab('logs')}
+                    >
+                      Logs
+                    </Tabs.Item>
+                    <Tabs.Item 
+                      active={activeTab === 'favorites'} 
+                      onClick={() => setActiveTab('favorites')}
+                    >
+                      Favorites
+                    </Tabs.Item>
+                  </Tabs>
+                  {/* Collection Filter Display - below tabs with 1rem spacing */}
+                  {selectedCollections.length > 0 && (
+                    <div className="flex w-full items-center gap-2 mt-4 flex-wrap">
+                      {selectedCollections.map((collection) => (
+                        <div key={collection} className="flex items-center gap-2 px-2 py-1 bg-transparent border border-dashed border-[#d7a604ff] rounded-full">
+                          <FeatherFolder className="text-[#d7a604ff] text-caption" />
+                          <span className="text-caption-bold font-caption-bold text-[#d7a604ff]">
+                            {collection}
+                          </span>
+                          <button 
+                            onClick={() => handleRemoveCollection(collection)}
+                            className="ml-1 text-[#d7a604ff] hover:text-red-600 font-bold text-xs leading-none transition-colors"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      {selectedCollections.length > 1 && (
+                        <button 
+                          onClick={handleClearFilters}
+                          className="text-body font-body text-subtext-color hover:text-default-font"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <Feed 
                   text="Today" 
                   text2="Yesterday" 
@@ -263,6 +340,8 @@ function PromptLogOverview() {
                   page={page} 
                   pageSize={pageSize} 
                   onCount={setTotal}
+                  favoritesOnly={activeTab === 'favorites'}
+                  selectedCollections={selectedCollections}
                 />
                 <div className="flex w-full items-center justify-center gap-4">
                   <span className="grow shrink-0 basis-0 text-body font-body text-subtext-color">
