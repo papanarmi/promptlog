@@ -5,7 +5,7 @@
  * Prompt card — https://app.subframe.com/ace97b1b228a/library?component=Prompt+card_8f873461-8555-4a52-8062-9b27510c91d6
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import * as SubframeUtils from "../utils";
 import { PromptCard } from "./PromptCard";
 import { useNavigate } from "react-router-dom";
@@ -36,51 +36,72 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
   const [totalCount, setTotalCount] = useState<number>(0);
 
   // Fetch all data for search functionality
+  const refreshData = useCallback(async () => {
+    const ascendingCreated = getSortDirection('created_at') === 'asc';
+    let query = supabase
+      .from('prompt_logs')
+      .select('id, created_at, title, content, collection, tags', { count: 'exact' })
+      .order('created_at', { ascending: ascendingCreated });
+
+    // Add favorites filter if needed
+    if (favoritesOnly) {
+      query = query.contains('tags', ['favorite']);
+    }
+
+    // Add collection filter if needed
+    if (selectedCollections.length > 0) {
+      query = query.in('collection', selectedCollections);
+    }
+
+    if (searchQuery.trim()) {
+      // When searching, fetch all data (up to a reasonable limit)
+      const { data, count, error } = await query.limit(1000); // Reasonable limit for client-side search
+      if (!error) {
+        setAllItems(data || []);
+        if (typeof count === 'number') {
+          setTotalCount(count);
+        }
+      }
+    } else {
+      // When not searching, use pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, count, error } = await query.range(from, to);
+      if (!error) {
+        setAllItems(data || []);
+        if (typeof count === 'number') {
+          setTotalCount(count);
+          onCount?.(count);
+        }
+      }
+    }
+  }, [page, pageSize, searchQuery, getSortDirection, favoritesOnly, selectedCollections, onCount]);
+
   useEffect(() => {
-    (async () => {
-      const ascendingCreated = getSortDirection('created_at') === 'asc';
-      let query = supabase
-        .from('prompt_logs')
-        .select('id, created_at, title, content, collection, tags', { count: 'exact' })
-        .order('created_at', { ascending: ascendingCreated });
-
-      // Add favorites filter if needed
-      if (favoritesOnly) {
-        query = query.contains('tags', ['favorite']);
-      }
-
-      // Add collection filter if needed
-      if (selectedCollections.length > 0) {
-        query = query.in('collection', selectedCollections);
-      }
-
-      if (searchQuery.trim()) {
-        // When searching, fetch all data (up to a reasonable limit)
-        const { data, count, error } = await query.limit(1000); // Reasonable limit for client-side search
-        if (!error) {
-          setAllItems(data || []);
-          if (typeof count === 'number') {
-            setTotalCount(count);
-          }
-        }
-      } else {
-        // When not searching, use pagination
-        const from = (page - 1) * pageSize;
-        const to = from + pageSize - 1;
-        const { data, count, error } = await query.range(from, to);
-        if (!error) {
-          setAllItems(data || []);
-          if (typeof count === 'number') {
-            setTotalCount(count);
-            onCount?.(count);
-          }
-        }
-      }
-    })();
+    refreshData();
     const onUpdated = (e: Event) => {
       const detail = (e as CustomEvent).detail as { id: string; title: string; content: string; collection: string | null; tags: string[] };
       if (!detail) return;
-      setAllItems((prev) => prev.map((it) => (it.id === detail.id ? { ...it, ...detail } : it)));
+      
+      setAllItems((prev) => {
+        // If we're viewing favorites only and the updated item no longer has 'favorite' tag, remove it instantly
+        if (favoritesOnly && !detail.tags.includes('favorite')) {
+          const itemExists = prev.find((it) => it.id === detail.id);
+          if (itemExists) {
+            const newItems = prev.filter((it) => it.id !== detail.id);
+            // Update total count to reflect the removal
+            setTotalCount((t) => {
+              const v = Math.max(0, t - 1);
+              onCount?.(v);
+              return v;
+            });
+            return newItems;
+          }
+        }
+        
+        // Normal update case - update the item properties if it exists in the current view
+        return prev.map((it) => (it.id === detail.id ? { ...it, title: detail.title, content: detail.content, collection: detail.collection, tags: detail.tags } : it));
+      });
     };
     const onTemplateUpdated = (ev: Event) => { onUpdated(ev) };
     window.addEventListener('template-updated', onTemplateUpdated as EventListener);
@@ -112,12 +133,21 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
     };
     const onTemplateCreated = (ev: Event) => { onCreated(ev) };
     window.addEventListener('template-created', onTemplateCreated as EventListener);
+    const onSoftRefresh = () => {
+      // For favorites-only view, do a full refresh to catch any newly favorited items
+      if (favoritesOnly) {
+        refreshData();
+      }
+    };
+    window.addEventListener('template-soft-refresh', onSoftRefresh as EventListener);
+    
     return () => {
       window.removeEventListener('template-updated', onTemplateUpdated as EventListener);
       window.removeEventListener('template-created', onTemplateCreated as EventListener);
       window.removeEventListener('template-removed', onTemplateRemoved as EventListener);
+      window.removeEventListener('template-soft-refresh', onSoftRefresh as EventListener);
     };
-  }, [page, pageSize, searchQuery, sortStateMap, getSortDirection, favoritesOnly, selectedCollections]);
+  }, [refreshData, favoritesOnly, onCount]);
 
   // Apply fuzzy search and pagination
   const items = useMemo(() => {
@@ -190,7 +220,7 @@ const FeedRoot = React.forwardRef<HTMLDivElement, FeedRootProps>(
       });
       return { label: labelFor(toDate(key)), items: groupItems };
     });
-  }, [items, sortStateMap, getSortDirection]);
+  }, [items, getSortDirection]);
 
   const formatRelative = (iso: string) => {
     const now = Date.now();

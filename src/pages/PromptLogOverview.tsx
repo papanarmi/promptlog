@@ -31,8 +31,40 @@ function PromptLogOverview() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [total, setTotal] = useState(0);
-  const [activeTab, setActiveTab] = useState<'logs' | 'favorites'>('logs');
-  const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
+  // Initialize tab from URL params or localStorage
+  const getInitialTab = (): 'logs' | 'favorites' => {
+    const urlParams = new URLSearchParams(location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam === 'favorites' || tabParam === 'logs') {
+      return tabParam;
+    }
+    // Fallback to localStorage
+    const saved = localStorage.getItem('promptlog-active-tab');
+    return (saved === 'favorites' || saved === 'logs') ? saved : 'logs';
+  };
+
+  // Initialize collections from URL params or localStorage
+  const getInitialCollections = (): string[] => {
+    const urlParams = new URLSearchParams(location.search);
+    const collectionsParam = urlParams.get('collections');
+    if (collectionsParam) {
+      try {
+        return JSON.parse(decodeURIComponent(collectionsParam));
+      } catch {
+        // If parsing fails, fall back to localStorage
+      }
+    }
+    // Fallback to localStorage
+    const saved = localStorage.getItem('promptlog-selected-collections');
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<'logs' | 'favorites'>(getInitialTab);
+  const [selectedCollections, setSelectedCollections] = useState<string[]>(getInitialCollections);
   const endIndex = Math.min(page * pageSize, Math.max(total, 0));
   const { collections, collectionsWithCounts, addCollection, renameCollection, removeCollection } = useCollections();
   const { searchQuery, performFuzzySearch, applySorting, getSortDirection } = useSearch();
@@ -61,6 +93,41 @@ function PromptLogOverview() {
     };
   }, []);
 
+  // Update URL and localStorage when tab or collections change
+  const updateUrlAndStorage = (tab: 'logs' | 'favorites', collections: string[]) => {
+    const urlParams = new URLSearchParams();
+    
+    // Add tab to URL if not default
+    if (tab !== 'logs') {
+      urlParams.set('tab', tab);
+    }
+    
+    // Add collections to URL if any selected
+    if (collections.length > 0) {
+      urlParams.set('collections', encodeURIComponent(JSON.stringify(collections)));
+    }
+    
+    // Update URL without triggering a page reload
+    const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
+    window.history.replaceState(null, '', newUrl);
+    
+    // Save to localStorage as fallback
+    localStorage.setItem('promptlog-active-tab', tab);
+    localStorage.setItem('promptlog-selected-collections', JSON.stringify(collections));
+  };
+
+  // Custom setActiveTab that also updates URL and storage
+  const handleTabChange = (tab: 'logs' | 'favorites') => {
+    setActiveTab(tab);
+    updateUrlAndStorage(tab, selectedCollections);
+  };
+
+  // Custom setSelectedCollections that also updates URL and storage
+  const handleCollectionsChange = (collections: string[]) => {
+    setSelectedCollections(collections);
+    updateUrlAndStorage(activeTab, collections);
+  };
+
   // Reset to first page on path change, tab change, or collection filter change
   useEffect(() => { setPage(1) }, [location.pathname, activeTab, selectedCollections]);
 
@@ -69,23 +136,19 @@ function PromptLogOverview() {
   };
 
   const handleCollectionClick = (collectionName: string) => {
-    setSelectedCollections(prev => {
-      if (prev.includes(collectionName)) {
-        // Remove if already selected
-        return prev.filter(name => name !== collectionName);
-      } else {
-        // Add if not selected
-        return [...prev, collectionName];
-      }
-    });
+    const newCollections = selectedCollections.includes(collectionName)
+      ? selectedCollections.filter(name => name !== collectionName)
+      : [...selectedCollections, collectionName];
+    handleCollectionsChange(newCollections);
   };
 
   const handleRemoveCollection = (collectionName: string) => {
-    setSelectedCollections(prev => prev.filter(name => name !== collectionName));
+    const newCollections = selectedCollections.filter(name => name !== collectionName);
+    handleCollectionsChange(newCollections);
   };
 
   const handleClearFilters = () => {
-    setSelectedCollections([]);
+    handleCollectionsChange([]);
   };
 
   // Download functionality
@@ -293,13 +356,13 @@ function PromptLogOverview() {
                   <Tabs>
                     <Tabs.Item 
                       active={activeTab === 'logs'} 
-                      onClick={() => setActiveTab('logs')}
+                      onClick={() => handleTabChange('logs')}
                     >
                       Logs
                     </Tabs.Item>
                     <Tabs.Item 
                       active={activeTab === 'favorites'} 
-                      onClick={() => setActiveTab('favorites')}
+                      onClick={() => handleTabChange('favorites')}
                     >
                       Favorites
                     </Tabs.Item>
